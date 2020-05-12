@@ -375,7 +375,7 @@ function run()
         elseif type(msg) == "number" then
             handlers[msg](param)
         else
-            handlers[msg.id](msg)
+            -- handlers[msg.id](msg)
         end
     end
 end

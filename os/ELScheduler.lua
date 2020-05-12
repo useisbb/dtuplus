@@ -99,6 +99,7 @@ end
 ----=[ Timer ]=--
 
 local Timer = {}
+-- local events = {}
 local Timer_meta = { __index = Timer }
 
 -- remove the timer
@@ -144,23 +145,24 @@ function Scheduler:tick(time)
   -- check timers
   local timers = self.timers
   local triggers = {}
-
   local timer = timers[1] -- root
   while timer and time >= timer.wake do
     -- mark/remove timer
-    table_insert(triggers, timer)
+    -- table_insert(triggers, timer)
     scheduler_heap_delete(self, 1)
-    timer = timers[1] -- next root
+    -- timer = timers[1] -- next root
+    return true,timer
   end
 
   -- repeat timers/trigger callbacks
-  for _, timer in ipairs(triggers) do
-    if timer.count ~= 0 then -- repeat timer
-      scheduler_add(self, timer)
-    end
-    timer:callback(timer)
-    return true,timer
-  end
+  -- for _, timer in ipairs(triggers) do
+  --   if timer.count ~= 0 then -- repeat timer
+  --     scheduler_add(self, timer)
+  --   end
+    -- timer:callback(timer)
+    -- table_insert(events, timer)
+    -- return true,timer
+  -- end
   return false
 end
 

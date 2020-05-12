@@ -9,7 +9,7 @@ PRODUCT_KEY = "DPVrZXiffhEUBeHOUwOKTlESam3aXvnR"
 --如果关闭调用log模块接口输出的日志，等级设置为log.LOG_SILENT即可
 print(package.path)
 print(package.cpath)
-require "zmq"
+-- require "zmq"
 require "log"
 
 -- LOG_LEVEL = log.LOGLEVEL_INFO
@@ -19,13 +19,8 @@ require "net"
 require "utils"
 require "patch"
 
---每1分钟查询一次GSM信号强度
---每1分钟查询一次基站信息
-net.startQueryAll(8000, 60000)
+
 if rtos.get_version():upper():find("ASR1802") then
-    ril.request("AT+MEDCR=0,8,1")
-    ril.request("AT+MEDCR=0,17,240")
-    ril.request("AT+MEDCR=0,19,1")
     rtos.set_trace_port(2)
 elseif rtos.get_version():upper():find("8955") then
     require "wdt"
@@ -33,13 +28,13 @@ elseif rtos.get_version():upper():find("8955") then
 end
 --加载错误日志管理功能模块【强烈建议打开此功能】
 --如下2行代码，只是简单的演示如何使用errDump功能，详情参考errDump的api
-require "errDump"
+-- require "errDump"
 -- errDump.request("udp://ota.airm2m.com:9072")
-require "ntp"
-ntp.timeSync(24, function()log.info(" AutoTimeSync is Done!") end)
+-- require "ntp"
+-- ntp.timeSync(24, function()log.info(" AutoTimeSync is Done!") end)
 
 --加载lnxall数据处理
---require "test.lua"
+require "test"
 
 --启动系统框架
 sys.init(0, 0)
