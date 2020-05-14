@@ -461,7 +461,7 @@ end)
 sys.poll_socket = function ()
     for _, client in pairs(sockets) do
         -- if client.wait == "+RECEIVE" then
-            local ret = ls.select({client.id},{},1)
+            local ret = ls.select({client.id},{},0.001)
             if ret and type(ret) == "table" then
                 msg={}
                 msg.id = rtos.MSG_SOCK_RECV_IND

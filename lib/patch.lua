@@ -7,7 +7,16 @@
 
 require"pm"
 require"uart"
+require"lpack"
+json = require"json"
+cjson = require"cjson"
 module(..., package.seeall)
+
+-- local str = '{"host": "mqtt.lnxall.com","port": 3883,"user": "localuser","pass": "dywl@galaxy"}'
+
+pack={}
+pack.pack=string.pack
+pack.unpack=string.unpack
 
 --[[
 模块名称：Lua自带接口补丁

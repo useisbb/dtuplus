@@ -1,9 +1,7 @@
 local Scheduler = require("ELScheduler")
 local chronos = require("chronos")
-json = require("json")
-fs = require("fs")
+local fs = require("fs")
 local math = require("math")
--- require ("patch-virture-env")
 local scheduler = Scheduler()
 pmd = require "pmd"
 unix={}
@@ -58,6 +56,12 @@ function unix.receive(msg_id)
             end
             if sys.poll_socket then
                 local msg = sys.poll_socket()
+                if msg then
+                    return msg
+                end
+            end
+            if sys.poll_uart then
+                local msg = sys.poll_uart()
                 if msg then
                     return msg
                 end

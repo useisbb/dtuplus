@@ -47,11 +47,11 @@ if not io.exists(TMP_DIR) then
     rtos.make_dir(TMP_DIR)
 end
 
--- -- 测试串口配置
--- local str = '{"mi":63901221,"rs485_cfg":[{"disable":0,"parity":0,"port":"RS485_1","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_2","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_3","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_4","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1}],"timestamp":1587102806,"version":"uJloPlpCA3Bd"}'
--- -- if not io.exists(LNXALL_rs485) then
---     io.writeFile(LNXALL_rs485, str, 'w')
--- -- end
+-- 测试串口配置
+local str = '{"mi":63901221,"rs485_cfg":[{"disable":0,"parity":0,"port":"RS485_1","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_2","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_3","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_4","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1}],"timestamp":1587102806,"version":"uJloPlpCA3Bd"}'
+-- if not io.exists(LNXALL_rs485) then
+    io.writeFile(LNXALL_rs485, str, 'w')
+-- end
 
 -- -- 测试mqtt配置
 -- local str = '{"host": "mqtt.lnxall.com","port": 3883,"user": "localuser","pass": "dywl@galaxy"}'
@@ -59,20 +59,20 @@ end
 --     io.writeFile(LNXALL_mqtt, str, 'w')
 -- -- end
 
--- -- 测试节点配置
--- local str = '{"nodes_cfg":[{"connect_port":"RS485_1","depth":0,"product_key":"23505558","sn":"44444444444","template_id":"23505558","term_addr":"02"}]}'
--- -- if not io.exists(LNXALL_nodes_cfg) then
---     io.writeFile(LNXALL_nodes_cfg, str, 'w')
--- -- end
+-- 测试节点配置
+local str = '{"nodes_cfg":[{"connect_port":"RS485_1","depth":0,"product_key":"23505558","sn":"44444444444","template_id":"23505558","term_addr":"02"}]}'
+-- if not io.exists(LNXALL_nodes_cfg) then
+    io.writeFile(LNXALL_nodes_cfg, str, 'w')
+-- end
 
--- -- 测试模板配置
--- local str = '{"template_cfg":[{"communication_timeout":0,"logout_times":0,"offline_times":0,"parser_url":"http://qa.iot.lnxall.com/iot/download/gateway-cfg/script_demo.lua","protocol":"GW_PROTC_MODBUS","report_period":0,"service_cfg":[{"direction":0,"identifier":"weiyishangbao","instruction_code":0,"report_period":10,"server_period":10},{"direction":1,"identifier":"weiyishangbao","instruction_code":0,"report_period":0,"server_period":0}],"template_id":"23505558","use_parser_url":1}]}'
--- -- if not io.exists(LNXALL_nodes_temp) then
---     io.writeFile(LNXALL_nodes_temp, str, 'w')
--- -- end
+-- 测试模板配置
+local str = '{"template_cfg":[{"communication_timeout":0,"logout_times":0,"offline_times":0,"parser_url":"http://qa.iot.lnxall.com/iot/download/gateway-cfg/script_demo.lua","protocol":"GW_PROTC_MODBUS","report_period":0,"service_cfg":[{"direction":0,"identifier":"weiyishangbao","instruction_code":0,"report_period":10,"server_period":10},{"direction":1,"identifier":"weiyishangbao","instruction_code":0,"report_period":0,"server_period":0}],"template_id":"23505558","use_parser_url":1}]}'
+-- if not io.exists(LNXALL_nodes_temp) then
+    io.writeFile(LNXALL_nodes_temp, str, 'w')
+-- end
 
--- -- 测试脚本  -- LuatTools 会把没有require的文件,忽略下载导致require失败
--- script_demo = require "script_demo"
+-- 测试脚本  -- LuatTools 会把没有require的文件,忽略下载导致require失败
+script_demo = require "script_demo"
 
 if io.exists(LNXALL_mqtt) then
     local dat, res, err = json.decode(io.readFile(LNXALL_mqtt) or '')
@@ -111,7 +111,7 @@ local function cbFncFile(result,prompt,head,filePath)
         end
     end
     -- 如果是临时文件直接删除
-    if string.find(filePath,"/download/") then os.remove(filePath) end
+    if string.find(filePath,TMP_DIR) then os.remove(filePath) end
 end
 
 -- 注意:saveFile 存放路径不能是/download/,否则文件不能被下载
@@ -119,7 +119,8 @@ function download(link , saveFile,timeout)
     if link then
         log.info('download : ' .. link,saveFile)
         -- 如果没有传进来需要保存的文件名,是临时文件
-        local file = saveFile or string.format( "/download/%s",lnxall_conf.getUrlFileName(link) or "")
+
+        local file = saveFile or string.format( "%s/%s",TMP_DIR,lnxall_conf.getUrlFileName(link) or "")
         http.request("GET",link,nil,nil,nil,10000,cbFncFile,file)
         local result, body = sys.waitUntil(file,timeout or 30000) --用文件名做消息id
         if result and body and #body > 20 then
@@ -212,8 +213,8 @@ local function bind_module_func(modules)
         local bind = string.format('\
         local %s = require \"%s\"\
         local cjson = require \"cjson\"\
-        if _G.nodes_cfg or _G.nodes_temp then \
-        print(\"== nodes config or template was invalid ==\",cjson.encode(_G.nodes_cfg),cjson.encode(_G.nodes_temp))\
+        if not _G.nodes_cfg or not _G.nodes_temp then \
+        print(\"nodes config or template was invalid \",cjson.encode(_G.nodes_cfg),cjson.encode(_G.nodes_temp))\
         end\
         for _,node in ipairs(_G.nodes_cfg) do\
             for _,temp in ipairs(_G.nodes_temp) do\

@@ -33,6 +33,7 @@ local para = {}
 --定时器是否循环表
 local loop = {}
 
+sys.poll_uart=uart.poll_uart
 
 -- 启动GSM协议栈。例如在充电开机未启动GSM协议栈状态下，如果用户长按键正常开机，此时调用此接口启动GSM协议栈即可
 -- @return 无

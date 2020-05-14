@@ -243,13 +243,13 @@ else
     }
 end
 
--- 网络READY信号
-if not dtu.pins or not dtu.pins[2] or not pios[dtu.pins[2]] then -- 这么定义是为了和之前的代码兼容
-    netready = pins.setup((is4gLod and 65) or (is8910 and 4) or 3, 0)
-else
-    netready = pins.setup(tonumber(dtu.pins[2]:sub(4, -1)), 0)
-    pios[dtu.pins[2]] = nil
-end
+-- -- 网络READY信号
+-- if not dtu.pins or not dtu.pins[2] or not pios[dtu.pins[2]] then -- 这么定义是为了和之前的代码兼容
+--     netready = pins.setup((is4gLod and 65) or (is8910 and 4) or 3, 0)
+-- else
+--     netready = pins.setup(tonumber(dtu.pins[2]:sub(4, -1)), 0)
+--     pios[dtu.pins[2]] = nil
+-- end
 
 -- 重置DTU
 if not dtu.pins or not dtu.pins[3] or not pios[dtu.pins[3]] then -- 这么定义是为了和之前的代码兼容
@@ -274,29 +274,29 @@ else
     end, pio.PULLUP)
     pios[dtu.pins[3]] = nil
 end
--- NETLED指示灯任务
-local function blinkPwm(ledPin, light, dark)
-    ledPin(1)
-    sys.wait(light)
-    ledPin(0)
-    sys.wait(dark)
-end
+-- -- NETLED指示灯任务
+-- local function blinkPwm(ledPin, light, dark)
+--     ledPin(1)
+--     sys.wait(light)
+--     ledPin(0)
+--     sys.wait(dark)
+-- end
 local function netled(led)
-    local ledpin = pins.setup(led, 1)
-    while true do
-        -- GSM注册中
-        while not link.isReady() do blinkPwm(ledpin, 100, 100) end
-        while link.isReady() do
-            if create.getDatalink() then
-                netready(1)
-                blinkPwm(ledpin, 200, 1800)
-            else
-                netready(0)
-                blinkPwm(ledpin, 500, 500)
-            end
-        end
-        sys.wait(100)
-    end
+    -- local ledpin = pins.setup(led, 1)
+    -- while true do
+    --     -- GSM注册中
+    --     while not link.isReady() do blinkPwm(ledpin, 100, 100) end
+    --     while link.isReady() do
+    --         if create.getDatalink() then
+    --             netready(1)
+    --             blinkPwm(ledpin, 200, 1800)
+    --         else
+    --             netready(0)
+    --             blinkPwm(ledpin, 500, 500)
+    --         end
+    --     end
+    --     sys.wait(100)
+    -- end
 end
 if not dtu.pins or not dtu.pins[1] or not pios[dtu.pins[1]] then -- 这么定义是为了和之前的代码兼容
     sys.taskInit(netled, (is4gLod and 64) or (is8910 and 1) or 33)
@@ -705,9 +705,9 @@ end
 -- end)
 
 sys.timerLoopStart(function()
-    log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
-    log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
-    socket.printStatus()
+    -- log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
+    -- log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
+    -- socket.printStatus()
 end, 10000)
 
 local callFlag = false
@@ -960,7 +960,7 @@ sys.taskInit(function()
                                     function modules.protocol_encode(...)  return protocol_encode(...) end\
                                     return modules\n"
                                     lua_str = lua_str .. suffix
-                                    local lua_path = string.format("%s/%s","/lua",file)
+                                    local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH,"/lua",file)
                                     log.info('nodes templates script file: ',lua_path,#lua_str)
                                     io.writeFile(lua_path, lua_str)
                                     lua_str = nil suffix = nil
