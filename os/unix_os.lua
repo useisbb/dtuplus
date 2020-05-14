@@ -1,9 +1,11 @@
 local Scheduler = require("ELScheduler")
 local chronos = require("chronos")
-local sleep = require("sleep")
-local json = require("json")
+json = require("json")
+fs = require("fs")
+local math = require("math")
+-- require ("patch-virture-env")
 local scheduler = Scheduler()
-
+pmd = require "pmd"
 unix={}
 
 unix.MSG_UART_RXDATA="receive"
@@ -14,12 +16,27 @@ unix.MSG_PDP_DEACT_IND="pdp_deact"
 unix.POWERON_CHARGER="power_charger"
 unix.MSG_INT="pin_int"
 
-local function gettick()
-    return chronos.nanotime()*1000
-end
+unix.MSG_SOCK_RECV_IND="sock_recv_ind"
+unix.MSG_SOCK_CLOSE_CNF="sock_close_cnf"
+unix.MSG_SOCK_CONN_CNF="sock_conn_cnf"
+unix.MSG_SOCK_SEND_CNF="sock_send_cnf"
+unix.MSG_SOCK_CLOSE_IND="sock_close_ind"
+
 
 local function callback(timer)
     local id = timer.param
+end
+
+function unix.tick()
+    return math.modf(chronos.nanotime()*1000)
+end
+
+function unix.get_fs_free_size(...)
+    return 1000
+end
+
+function unix.make_dir(...)
+    return fs.mkdir(...)
 end
 
 function unix.set_trace_port(port)
@@ -32,12 +49,18 @@ end
 
 function unix.receive(msg_id)
     if msg_id == unix.INF_TIMEOUT then
-        local msg = nil
         while true do
-            local ret,timer = scheduler:tick(gettick())
+            local ret,timer = scheduler:tick(unix.tick())
             if ret and ret == true then
+                local msg = nil
                 msg = unix.MSG_TIMER
                 return msg, timer.param
+            end
+            if sys.poll_socket then
+                local msg = sys.poll_socket()
+                if msg then
+                    return msg
+                end
             end
         end
     end

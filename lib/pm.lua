@@ -32,7 +32,7 @@ function wake(tag)
         --设置为唤醒状态
         flag = false
         --调用底层软件接口，真正唤醒系统
-        pmd.sleep(0)
+        -- pmd.sleep(0)
     end
 end
 --- 某个Lua应用休眠系统
@@ -51,7 +51,7 @@ function sleep(tag)
     end
     flag = true
     --调用底层软件接口，真正休眠系统
-    pmd.sleep(1)
+    -- pmd.sleep(1)
 end
 
 --- pm.isSleep([tag]) 读取某个Lua应用或者全局的休眠状态

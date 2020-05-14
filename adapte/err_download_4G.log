@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "download_4G_Scrpt.pyo", line 806, in thread_lod
+  File "download_4G_Scrpt.pyo", line 749, in thread_handle
+  File "download_4G_Scrpt.pyo", line 736, in download_4G_script
+  File "FourG_Handle.pyo", line 1177, in download_4G_script
+  File "FourG_Handle.pyo", line 1065, in GetNowModleType
+  File "FourG_Handle.pyo", line 771, in CheckNandOrNor
+  File "misc.pyo", line 88, in make_ini
+IOError: [Errno 2] No such file or directory: u'.\\4G_Temp\\CheckNandOrNor1.txt'

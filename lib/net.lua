@@ -49,7 +49,7 @@ local cellinfo, multicellcb = {}
 function switchFly(mode)
 	if flyMode == mode then return end
 	flyMode = mode
-	log.debug("net",string.format("setting fly mode %d(true:飞行模式开，false:飞行模式关)",flyMode))
+	log.debug("net",string.format("setting fly mode (true:飞行模式开，false:飞行模式关)"),flyMode)
 end
 
 --- 获取netmode

@@ -6,7 +6,7 @@
 -- @release 2017.9.25
 require "link"
 require "utils"
-local lsocket  = require "lsocket"
+local ls  = require "lsocket"
 module(..., package.seeall)
 
 local sockets = {}
@@ -121,7 +121,18 @@ function mt:connect(address, port, timeout)
     self.address = address
     self.port = port
     if self.protocol == 'TCP' then
-        self.id = lsocket.connect("tcp", self.address, self.port)
+        client, err = ls.connect(address, port)
+        if not client then
+            log.error("socket","connect error: "..err)
+        end
+
+        -- wait for connect() to succeed or fail
+        ls.select(nil, {client},10)
+        ok, err = client:status()
+        if not ok then
+            log.error("socket","connect error: "..err)
+        end
+        self.id = client
     elseif self.protocol == 'TCPSSL' then
         local cert = {hostName = address}
         if self.cert then
@@ -139,10 +150,12 @@ function mt:connect(address, port, timeout)
             end
         end
         -- self.id = socket_connect_fnc(2, address, port, cert)
-        -- self.sock = lsocket.connect("udp", address, port)
+        -- self.sock = ls.connect("udp", address, port)
         log.error("socket","not support tcpssl protocol")
     else
-        self.id = lsocket.connect("udp", address, port)
+        local err,msg = ls.bind(address, port)
+        if not err then log.error("socket","connect failed",msg,"tcp", address, port) return end
+        self.id = err
     end
 
     if not self.id then
@@ -152,14 +165,14 @@ function mt:connect(address, port, timeout)
     log.info("socket:connect-coreid,prot,addr,port,cert,timeout", self.id, self.protocol, address, port, self.cert, timeout or 120)
     sockets[self.id] = self
     self.wait = "SOCKET_CONNECT"
-    self.timerId = sys.timerStart(coroutine.resume, (timeout or 120) * 1000, self.co, false, "TIMEOUT")
-    local result, reason = coroutine.yield()
-    if self.timerId and reason ~= "TIMEOUT" then sys.timerStop(self.timerId) end
-    if not result then
-        log.info("socket:connect: connect fail", reason)
-        sys.publish("LIB_SOCKET_CONNECT_FAIL_IND", self.ssl, self.protocol, address, port)
-        return false
-    end
+    -- self.timerId = sys.timerStart(coroutine.resume, (timeout or 120) * 1000, self.co, false, "TIMEOUT")
+    -- local result, reason = coroutine.yield()
+    -- if self.timerId and reason ~= "TIMEOUT" then sys.timerStop(self.timerId) end
+    -- if self.id then
+    --     log.info("socket:connect: connect fail", reason)
+    --     sys.publish("LIB_SOCKET_CONNECT_FAIL_IND", self.ssl, self.protocol, address, port)
+    --     return false
+    -- end
     log.info("socket:connect: connect ok")
 
     if not self.connected then
@@ -267,12 +280,9 @@ function mt:send(data, timeout)
     for i = 1, string.len(data or ""), SENDSIZE do
         -- 按最大MTU单元对data分包
         self.wait = "SOCKET_SEND"
-        self.id:send(data:sub(i, i + SENDSIZE - 1))
-        self.timerId = sys.timerStart(coroutine.resume, (timeout or 120) * 1000, self.co, false, "TIMEOUT")
-        local result, reason = coroutine.yield()
-        if self.timerId and reason ~= "TIMEOUT" then sys.timerStop(self.timerId) end
-        if not result then
-            log.info("socket:send", "send fail", reason)
+        local nbytes ,msg = self.id:send(data:sub(i, i + SENDSIZE - 1))
+        if not nbytes or nbytes == false  then
+            log.info("socket:send", "send fail", nbytes,msg)
             sys.publish("LIB_SOCKET_SEND_FAIL_IND", self.ssl, self.protocol, self.address, self.port)
             return false
         end
@@ -309,37 +319,31 @@ function mt:recv(timeout, msg, msgNoResume)
     if #self.input == 0 then
         self.wait = "+RECEIVE"
         if timeout and timeout > 0 then
-            local r, s = sys.wait(timeout)
-            if r == nil then
-                return false, "timeout"
-            elseif r == 0xAA then
-                local dat = table.concat(self.output)
-                self.output = {}
-                return false, msg, dat
-            else
-                return r, s
-            end
-        else
-            local r, s = coroutine.yield()
-            if r == 0xAA then
-                local dat = table.concat(self.output)
-                self.output = {}
-                return false, msg, dat
-            else
-                return r, s
-            end
+            sys.timerStart(function(data)
+                if self.wait == "+RECEIVE" and not self.msgNoResume then coroutine.resume(self.co, 0x55) end
+            end, timeout)
+        end
+        local r, s = coroutine.yield()
+        if r == 0xAA then
+            local dat = table.concat(self.output)
+            self.output = {}
+            return false, msg, dat
+        elseif r == 0x55 then
+            return false, "timeout"
+        elseif r == true then
+            return true,s
         end
     end
 
-    if self.protocol == "UDP" then
-        return true, table.remove(self.input)
-    else
-        log.warn("-------------------使用缓冲区---------------")
-        local s = table.concat(self.input)
-        self.input = {}
-        if self.isBlock then table.insert(self.input, self.msg.socket_index:recv(self.msg.recv_len)) end
-        return true, s
-    end
+    -- if self.protocol == "UDP" then
+    --     return true, table.remove(self.input)
+    -- else
+    --     log.warn("-------------------使用缓冲区---------------")
+    --     local s = table.concat(self.input)
+    --     self.input = {}
+    --     if self.isBlock then table.insert(self.input, self.msg.socket_index:recv(self.msg.recv_len)) end
+    --     return true, s
+    -- end
 end
 
 --- 销毁一个socket
@@ -437,7 +441,9 @@ rtos.on(rtos.MSG_SOCK_RECV_IND, function(msg)
     -- local s = self.id: msg.recv_len)
     -- log.debug("socket.recv", "total " .. msg.recv_len .. " bytes", "first " .. 30 .. " bytes", s:sub(1, 30))
     if sockets[msg.socket_index].wait == "+RECEIVE" then
-        coroutine.resume(sockets[msg.socket_index].co, true, self.id:recv(msg.recv_len))
+        local temp = sockets[msg.socket_index].id:recv(msg.recv_len)
+        -- log.debug("socket","socket.on",temp)
+        coroutine.resume(sockets[msg.socket_index].co, true, temp)
     else -- 数据进缓冲区，缓冲区溢出采用覆盖模式
         if #sockets[msg.socket_index].input > INDEX_MAX then
             log.error("socket recv", "out of stack", "block")
@@ -446,11 +452,25 @@ rtos.on(rtos.MSG_SOCK_RECV_IND, function(msg)
             sockets[msg.socket_index].msg = msg
         else
             sockets[msg.socket_index].isBlock = false
-            table.insert(sockets[msg.socket_index].input, self.id:recv(msg.recv_len))
+            table.insert(sockets[msg.socket_index].input, sockets[msg.socket_index].id:recv(msg.recv_len))
         end
         sys.publish("SOCKET_RECV", msg.socket_index)
     end
 end)
+
+sys.poll_socket = function ()
+    for _, client in pairs(sockets) do
+        -- if client.wait == "+RECEIVE" then
+            local ret = ls.select({client.id},{},1)
+            if ret and type(ret) == "table" then
+                msg={}
+                msg.id = rtos.MSG_SOCK_RECV_IND
+                msg.socket_index = client.id
+                return msg
+            end
+        -- end
+    end
+end
 
 --- 设置TCP层自动重传的参数
 -- @number[opt=4] retryCnt，重传次数；取值范围0到12

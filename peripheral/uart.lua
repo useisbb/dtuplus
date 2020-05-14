@@ -44,16 +44,20 @@ end
 
 function uart.read(id,fmt)
     log.debug("peripheral-uart",string.format("串口[%d] read",id))
-    local bin = '\2\3\5\6\2\4'
-    local str = '1234567'
-    table.insert( rxbuff,str)
+    -- local bin = '\2\3\5\6\2\4'
+    -- local str = '1234567'
+    -- table.insert( rxbuff,str)
     local data = table.remove( rxbuff, 1 )
     if data and type(data) == "number" then
         log.info("peripheral-uart",string.format("Hex:%X",data))
     elseif data and type(data) == "string" then
         log.info("peripheral-uart",string.format("String:%s",data))
     end
-    return data
+    return data or ""
+end
+
+function uart.set_rs485_oe(id,dir)
+    log.debug("peripheral-uart",string.format("串口[%d] dir %s",id,dir))
 end
 
 return uart

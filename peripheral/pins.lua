@@ -30,46 +30,7 @@ local dirs = {}
 -- @usage getInputFnc = pins.setup(pio.P1_1),配置GPIO33，输入模式
 --执行getInputFnc()即可获得当前电平；如果是低电平，getInputFnc()返回0；如果是高电平，getInputFnc()返回1
 function setup(pin, val, pull)
-    -- 关闭该IO
-    pio.pin.close(pin)
-    -- 中断模式配置
-    if type(val) == "function" then
-        pio.pin.setdir(pio.INT, pin)
-        if pull then pio.pin.setpull(pull or pio.PULLUP, pin) end
-        --注册引脚中断的处理函数
-        interruptCallbacks[pin] = val
-        dirs[pin] = false
-        return function()
-            return pio.pin.getval(pin)
-        end
-    end
-    -- 输出模式初始化默认配置
-    if val ~= nil then
-        dirs[pin] = true
-        pio.pin.setdir(val == 1 and pio.OUTPUT1 or pio.OUTPUT, pin)
-    else
-        -- 输入模式初始化默认配置
-        dirs[pin] = false
-        pio.pin.setdir(pio.INPUT, pin)
-        if pull then pio.pin.setpull(pull or pio.PULLUP, pin) end
-    end
-    -- 返回一个自动切换输入输出模式的函数
-    return function(val)
-        val = tonumber(val)
-        if (not val and dirs[pin]) or (val and not dirs[pin]) then
-            pio.pin.close(pin)
-            pio.pin.setdir(val and (val == 1 and pio.OUTPUT1 or pio.OUTPUT) or pio.INPUT, pin)
-            if not val and pull then pio.pin.setpull(pull or pio.PULLUP, pin) end
-            dirs[pin] = val and true or false
-            return val or pio.pin.getval(pin)
-        end
-        if val then
-            pio.pin.setval(val, pin)
-            return val
-        else
-            return pio.pin.getval(pin)
-        end
-    end
+
 end
 
 --- 关闭GPIO模式
@@ -80,7 +41,7 @@ end
 -- GPIO 32到GPIO XX表示为pio.P1_0到pio.P1_(XX-32)，例如GPIO33 表示为pio.P1_1
 -- @usage pins.close(pio.P1_1)，关闭GPIO33
 function close(pin)
-    pio.pin.close(pin)
+
 end
 
 rtos.on(rtos.MSG_INT, function(msg)

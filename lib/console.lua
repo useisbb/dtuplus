@@ -6,7 +6,6 @@
 -- @copyright openLuat
 -- @release 2017.9.15
 
-require"ril"
 module(..., package.seeall)
 local uart_id
 local console_task
@@ -60,16 +59,16 @@ local function main_loop()
             write("\r\n")
         end,
         sendat = function(cmd, data)
-            ril.request(cmd, data, function(cmd, success, response, intermediate)
-                if intermediate then
-                    write("\r\n" .. intermediate .. "\r\n")
-                end
-                if response then
-                    write("\r\n" .. response .. "\r\n")
-                end
-                coroutine.resume(console_task, "WAIT_AT_RESPONSE")
-            end, nil)
-            wait_event_flag = "WAIT_AT_RESPONSE"
+            -- ril.request(cmd, data, function(cmd, success, response, intermediate)
+            --     if intermediate then
+            --         write("\r\n" .. intermediate .. "\r\n")
+            --     end
+            --     if response then
+            --         write("\r\n" .. response .. "\r\n")
+            --     end
+            --     coroutine.resume(console_task, "WAIT_AT_RESPONSE")
+            -- end, nil)
+            -- wait_event_flag = "WAIT_AT_RESPONSE"
         end,
     }
     setmetatable(execute_env, { __index = _G })
