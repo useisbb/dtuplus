@@ -39,5 +39,4 @@ luac.out
 *.i*86
 *.x86_64
 *.hex
-/parser_script
 luat_file/
