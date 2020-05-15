@@ -592,7 +592,6 @@ function uart_timeout(uid,str)
     confirmIdle[uid] = true
     local str = table.remove(confirmBuff[uid])
     if str then sys.publish("NET_RECV_WAIT_" .. uid, uid, str) end
-
 end
 
 -- uart 的初始化配置函数
@@ -1041,4 +1040,3 @@ if dtu.task and #dtu.task ~= 0 then
         end
     end
 end
-

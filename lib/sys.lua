@@ -375,6 +375,8 @@ function run()
         --其他消息（音频消息、充电管理消息、按键消息等）
         elseif type(msg) == "number" then
             handlers[msg](param)
+        elseif msg.uid and msg.msgid and type(msg.uid) == "number" then  --增加串口消息
+            handlers[msg.msgid](param)
         else
             handlers[msg.id](msg)
         end
@@ -387,3 +389,5 @@ if type(rtos.openSoftDog)=="function" then
     rtos.openSoftDog(60000)
     sys.timerLoopStart(rtos.eatSoftDog,20000)
 end
+
+

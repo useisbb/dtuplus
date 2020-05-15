@@ -16,7 +16,7 @@ bcd = require "bcd"
 syslog = require "syslog"
 dyutils = require "dyutils"
 lpack = require "lua_pack"
-base64 = require "base64"
+-- base64 = require "base64"
 bit = require "bit"
 
 bnot = bit.bnot band, bor, bxor = bit.band, bit.bor, bit.bxor lshift, rshift, rol = bit.lshift, bit.rshift, bit.rol
@@ -80,7 +80,7 @@ function inxallStart()
                     bin = string.fromHex(json_str)
                     log.info('downlink binary message with hex string pack:',json_str)
                 else       -- base64数据
-                    bin = output.b64_data and base64.decode(output.b64_data)
+                    -- bin = output.b64_data and base64.decode(output.b64_data)
                     log.info('downlink binary message with base64 of json:',json_str)
                 end
                 sys.publish("NET_RECV_WAIT_" .. uid,uid,bin)
@@ -116,7 +116,7 @@ function inxallStart()
             end
         end
         input.raw_data=string.toHex(rawdata)
-        input.b64_data=base64.encode(rawdata)
+        -- input.b64_data=base64.encode(rawdata)
         if valid and valid == true then --sn, identifier, mi 这些值在下行数据发送时被保存
             log.info('downlink command or data response parse function')
             input.identifier=v.identifier

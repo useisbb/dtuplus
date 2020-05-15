@@ -156,7 +156,7 @@ local function taskClient(method,protocal,auth,host,port,path,cert,head,body,tim
                         --保存到文件中
                         if type(rcvFilePath)=="string" then
                             local file = io.open(rcvFilePath,"a+")
-                            print("===============",rcvFilePath)
+
                             if not file then return response(client,cbFnc,false,"receive: open file error",rspHead,rcvFilePath or table.concat(rspBody)) end
                             if not file:write(chunkData) then response(client,cbFnc,false,"receive: write file error",rspHead,rcvFilePath or table.concat(rspBody)) end
                             file:close()

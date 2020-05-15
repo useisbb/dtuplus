@@ -63,7 +63,7 @@ function unix.receive(msg_id)
             if sys.poll_uart then
                 local msg = sys.poll_uart()
                 if msg then
-                    return msg
+                    return msg,msg.uid
                 end
             end
         end
