@@ -4,13 +4,18 @@
 -- @license MIT
 -- @copyright openLuat
 -- @release 2018.12.27
+require "pm"
+require "iic"
+require "sms"
 require "pins"
 require "misc"
 require "mqtt"
 require "utils"
+require "lbsLoc"
 require "socket"
 require "update"
 require "httpv2"
+require "gpsv2"
 require "common"
 require "tracker"
 module(..., package.seeall)

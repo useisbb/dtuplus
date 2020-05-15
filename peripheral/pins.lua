@@ -29,8 +29,13 @@ local dirs = {}
 -- 执行getInputFnc()即可获得当前电平；如果是低电平，getInputFnc()返回0；如果是高电平，getInputFnc()返回1
 -- @usage getInputFnc = pins.setup(pio.P1_1),配置GPIO33，输入模式
 --执行getInputFnc()即可获得当前电平；如果是低电平，getInputFnc()返回0；如果是高电平，getInputFnc()返回1
-function setup(pin, val, pull)
 
+local function netled(pin)
+
+end
+
+function setup(pin, val, pull)
+    return netled
 end
 
 --- 关闭GPIO模式

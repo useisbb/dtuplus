@@ -6,12 +6,16 @@
 -- @release 2018.12.27
 -- require "cc"
 require "pm"
+require "iic"
+require "sms"
 require "link"
 require "pins"
 require "misc"
 require "mqtt"
 require "utils"
+require "lbsLoc"
 require "socket"
+require "audio"
 require "httpv2"
 require "common"
 require "create"
@@ -243,13 +247,13 @@ else
     }
 end
 
--- -- 网络READY信号
--- if not dtu.pins or not dtu.pins[2] or not pios[dtu.pins[2]] then -- 这么定义是为了和之前的代码兼容
---     netready = pins.setup((is4gLod and 65) or (is8910 and 4) or 3, 0)
--- else
---     netready = pins.setup(tonumber(dtu.pins[2]:sub(4, -1)), 0)
---     pios[dtu.pins[2]] = nil
--- end
+-- 网络READY信号
+if not dtu.pins or not dtu.pins[2] or not pios[dtu.pins[2]] then -- 这么定义是为了和之前的代码兼容
+    netready = pins.setup((is4gLod and 65) or (is8910 and 4) or 3, 0)
+else
+    netready = pins.setup(tonumber(dtu.pins[2]:sub(4, -1)), 0)
+    pios[dtu.pins[2]] = nil
+end
 
 -- 重置DTU
 if not dtu.pins or not dtu.pins[3] or not pios[dtu.pins[3]] then -- 这么定义是为了和之前的代码兼容
@@ -274,29 +278,29 @@ else
     end, pio.PULLUP)
     pios[dtu.pins[3]] = nil
 end
--- -- NETLED指示灯任务
--- local function blinkPwm(ledPin, light, dark)
---     ledPin(1)
---     sys.wait(light)
---     ledPin(0)
---     sys.wait(dark)
--- end
+-- NETLED指示灯任务
+local function blinkPwm(ledPin, light, dark)
+    ledPin(1)
+    sys.wait(light)
+    ledPin(0)
+    sys.wait(dark)
+end
 local function netled(led)
-    -- local ledpin = pins.setup(led, 1)
-    -- while true do
-    --     -- GSM注册中
-    --     while not link.isReady() do blinkPwm(ledpin, 100, 100) end
-    --     while link.isReady() do
-    --         if create.getDatalink() then
-    --             netready(1)
-    --             blinkPwm(ledpin, 200, 1800)
-    --         else
-    --             netready(0)
-    --             blinkPwm(ledpin, 500, 500)
-    --         end
-    --     end
-    --     sys.wait(100)
-    -- end
+    local ledpin = pins.setup(led, 1)
+    while true do
+        -- GSM注册中
+        while not link.isReady() do blinkPwm(ledpin, 100, 100) end
+        while link.isReady() do
+            if create.getDatalink() then
+                netready(1)
+                blinkPwm(ledpin, 200, 1800)
+            else
+                netready(0)
+                blinkPwm(ledpin, 500, 500)
+            end
+        end
+        sys.wait(100)
+    end
 end
 if not dtu.pins or not dtu.pins[1] or not pios[dtu.pins[1]] then -- 这么定义是为了和之前的代码兼容
     sys.taskInit(netled, (is4gLod and 64) or (is8910 and 1) or 33)
@@ -592,6 +596,7 @@ function uart_timeout(uid,str)
     confirmIdle[uid] = true
     local str = table.remove(confirmBuff[uid])
     if str then sys.publish("NET_RECV_WAIT_" .. uid, uid, str) end
+
 end
 
 -- uart 的初始化配置函数
@@ -704,9 +709,9 @@ end
 -- end)
 
 sys.timerLoopStart(function()
-    -- log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
-    -- log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
-    -- socket.printStatus()
+    log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
+    log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
+    socket.printStatus()
 end, 10000)
 
 local callFlag = false
@@ -728,12 +733,12 @@ sys.subscribe("CALL_DISCONNECTED", function()
     sys.timerStopAll(cc.hangUp)
 end)
 
--- sms.setNewSmsCb(function(num, data, datetime)
---     log.info("Procnewsms", num, data, datetime)
---     if num:match(dtu.preset.number) and data == dtu.preset.smsword then
---         sys.publish("UPDATE_DTU_CNF")
---     end
--- end)
+sms.setNewSmsCb(function(num, data, datetime)
+    log.info("Procnewsms", num, data, datetime)
+    if num:match(dtu.preset.number) and data == dtu.preset.smsword then
+        sys.publish("UPDATE_DTU_CNF")
+    end
+end)
 
 -- 初始化配置UART1和UART2
 
@@ -804,7 +809,7 @@ local function adcWarn(adcid, und, lowv, over, highv, diff, msg, id, sfreq, upfr
         if ((tonumber(und) == 1 and voltValue < tonumber(lowv)) or (tonumber(over) == 1 and voltValue > tonumber(highv))) then
             if upcnt == 0 then
                 if tonumber(net) == 1 then sys.publish("NET_SENT_RDY_" .. id, msg) end
-                -- if tonumber(note) == 1 and dtu.preset and tonumber(dtu.preset.number) then sms.send(dtu.preset.number, common.utf8ToGb2312(msg)) end
+                if tonumber(note) == 1 and dtu.preset and tonumber(dtu.preset.number) then sms.send(dtu.preset.number, common.utf8ToGb2312(msg)) end
                 if tonumber(tel) == 1 and dtu.preset and tonumber(dtu.preset.number) then
                     if cc and cc.dial then
                         cc.dial(dtu.preset.number, 5)
@@ -838,37 +843,6 @@ if lnxall_conf.lx_mqtt then
 end
 
 
-
--- --启动socket客户端任务
--- sys.taskInit(
---     function()
---         local retryConnectCnt = 0
---         while true do
-
---                 --创建一个socket tcp客户端
---                 local socketClient = socket.tcp()
---                 --阻塞执行socket connect动作，直至成功
---                 if socketClient:connect("10.3.1.217",12345,3) then
---                     retryConnectCnt = 0
---                     ready = true
-
---                     while true do
---                         local ret,data,param = socketClient:recv(1000,"TEST_MSG")
---                         -- if ret and ret == true then
---                             log.info("recv data:",ret,data,param)
---                         -- end
---                     end
-
---                 end
---                 --断开socket连接
---                 socketClient:close()
---                 if retryConnectCnt>=5 then link.shut() retryConnectCnt=0 end
---                 sys.wait(5000)
---         end
---     end
--- )
-
-sys.timerLoopStart(function() sys.publish("TEST_MSG","mymsg") end, 500)
 
 -- ---------------------------------------------------------- 参数配置,任务转发，线程守护主进程----------------------------------------------------------
 sys.taskInit(create.connect, pios, dtu.conf, dtu.reg, tonumber(dtu.convert) or 0, (tonumber(dtu.passon) == 0), dtu.upprot, dtu.dwprot)
@@ -959,7 +933,7 @@ sys.taskInit(function()
                                     function modules.protocol_encode(...)  return protocol_encode(...) end\
                                     return modules\n"
                                     lua_str = lua_str .. suffix
-                                    local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH,"/lua",file)
+                                    local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH or "","/lua",file)
                                     log.info('nodes templates script file: ',lua_path,#lua_str)
                                     io.writeFile(lua_path, lua_str)
                                     lua_str = nil suffix = nil
