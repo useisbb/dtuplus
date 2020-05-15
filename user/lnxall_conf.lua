@@ -11,7 +11,7 @@ module(..., package.seeall)
 
 -- PREFIX
 PREFIX_PATH="./luat_file"
-
+LUA_DIR = PREFIX_PATH .. "/lua/"
 TMP_DIR= PREFIX_PATH .. '/download/'
 LNXALL_DIR=PREFIX_PATH .. '/lnxall/'
 LNXALL_rs485=PREFIX_PATH .. '/lnxall/rs485_port_cfg.json'
@@ -40,6 +40,10 @@ local cookid = 0
 lx_mqtt={"LNXALL",300,1800,"mqtt.lnxall.com",3883,"localuser","dywl@galaxy",1,"M/imei/#;","G/imei/LogIn",2,0,1}
 
 -- 如果配置目录不存在，创建目录
+if not io.exists(LUA_DIR) then
+    rtos.make_dir(LUA_DIR)
+end
+
 if not io.exists(LNXALL_DIR) then
     rtos.make_dir(LNXALL_DIR)
 end
