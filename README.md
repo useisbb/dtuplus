@@ -1,4 +1,4 @@
-#DTU+
+# DTU+
 ## 概述
 基于lua5.1引擎和标准lua库.实现运行在linux平台的luatOS
 运行lua5.1以及以上环境,部分语法可能不支持,例如
@@ -18,6 +18,7 @@
     opkg install luarocks"
     ```
 ### 运行环境部署脚本
+
     ```
     git clone -b virtureDtu http://10.3.1.144/lnxall/dtuplus.git
     cd dtuplus/
@@ -33,6 +34,7 @@
 * 移除4g模组相关代码
 
 ## 目录结构
+
     ```
     .
     ├── adapte              适配air720和原openwrt的库
