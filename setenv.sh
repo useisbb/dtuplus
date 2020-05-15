@@ -15,7 +15,7 @@ fi
 
 
 
-DEPENDS="chronos elscheduler lpack lsocket lua-fs-module lua-cjson luabitop luars232 "
+DEPENDS="chronos elscheduler lpack lsocket lbase64 lua-cjson luabitop luars232"
 for k in ${DEPENDS}
 do
 	echo "sudo luarocks install ${k}"
