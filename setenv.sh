@@ -5,13 +5,13 @@ then
         exit 0
 fi
 
-LUA_VER5_2=`dpkg -s lua5.2 | grep 'installed'`
-LUA_VER5_3=`dpkg -s lua5.3 | grep 'installed'`
-if [ -n "$LUA_VER5_2" -o  -n "$LUA_VER5_3" ];
-then
-        echo "You need remove lua5.2 or lua5.3,run sudo apt remove lua5.2 or lua5.3"
-        exit 0
-fi
+#LUA_VER5_2=`dpkg -s lua5.2 | grep 'installed'`
+#LUA_VER5_3=`dpkg -s lua5.3 | grep 'installed'`
+#if [ -n "$LUA_VER5_2" -o  -n "$LUA_VER5_3" ];
+#then
+#        echo "You need remove lua5.2 or lua5.3,run sudo apt remove lua5.2 or lua5.3"
+#        exit 0
+#fi
 
 
 
