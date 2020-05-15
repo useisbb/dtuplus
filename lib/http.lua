@@ -269,6 +269,7 @@ end
 -- http.request("GET","https://www.baidu.com",{caCert="ca.crt",clientCert = "client.crt",clientKey = "client.key"})
 -- http.request("GET","https://www.baidu.com",{caCert="ca.crt",clientCert = "client.crt",clientKey = "client.key",clientPassword = "123456"})
 function request(method,url,cert,head,body,timeout,cbFnc,rcvFileName)
+    os.remove(rcvFileName)
     local protocal,auth,hostName,port,path,d1,d2,offset,rcvFilePath
     d1,d2,protocal = url:find("^(%a+)://")
     if not protocal then protocal = "http" end

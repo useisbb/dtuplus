@@ -320,6 +320,7 @@ function reload()
     if io.exists(lnxall_conf.LNXALL_nodes_cfg) then
         nodes_cfg = nil
         local dat, res, err = json.decode(io.readFile(lnxall_conf.LNXALL_nodes_cfg) or '')
+        log.info("load nodes config size:",json.encode(dat),dat, res, err)
         nodes_cfg= dat.nodes_cfg
         _G.nodes_cfg = nodes_cfg
         log.info("load nodes config size:",#nodes_cfg,json.encode(nodes_cfg))
@@ -379,6 +380,21 @@ function scriptEncodeBysn(sn)
         for k,v in ipairs(nodes_cfg)do
             if v and v['sn'] == sn then
                 return v['protocol_encode']
+            end
+        end
+    end
+    return nil
+end
+
+function offlineTimeBysn(sn)
+    if sn then
+        for _,node in ipairs(nodes_cfg) do  --确认模板被应用的设备有哪些
+            if node.sn == sn then
+                for _,temp in ipairs(nodes_temp) do
+                    if temp.template_id == node.template_id then
+                        return temp.offline_times
+                    end
+                end
             end
         end
     end

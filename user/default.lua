@@ -708,11 +708,11 @@ end
 --     end
 -- end)
 
-sys.timerLoopStart(function()
-    log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
-    log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
-    socket.printStatus()
-end, 10000)
+-- sys.timerLoopStart(function()
+--     log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
+--     log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
+--     socket.printStatus()
+-- end, 10000)
 
 local callFlag = false
 sys.subscribe("CALL_INCOMING", function(num)
@@ -882,6 +882,11 @@ function JJ_Msg_subscribe()
     end, 60 * 1000)
 end
 
+local function reload()
+    lnxall_conf.reload()
+    status.reload()
+end
+
 sys.taskInit(function()
     while true do
         local result, data  = nil,nil
@@ -891,8 +896,8 @@ sys.taskInit(function()
                 log.warn('download nodes config files failed!',status)
             end
             -- 设定一定的延迟生效,如果有配置推送过来从新延迟
-            if sys.timerIsActive(lnxall_conf.reload) then sys.timerStop(lnxall_conf.reload) end
-            sys.timerStart(lnxall_conf.reload, 5000)
+            if sys.timerIsActive(reload) then sys.timerStop(reload) end
+            sys.timerStart(reload, 5000)
         end
     end
 end)
@@ -953,8 +958,8 @@ sys.taskInit(function()
                     json_in = nil obj = nil
                     collectgarbage("collect")
                     -- 设定一定的延迟生效,如果有配置推送过来从新延迟
-                    if sys.timerIsActive(lnxall_conf.reload) then sys.timerStop(lnxall_conf.reload) end
-                    sys.timerStart(lnxall_conf.reload, 5000)
+                    if sys.timerIsActive(reload) then sys.timerStop(reload) end
+                    sys.timerStart(reload, 5000)
                 else
                     log.warn("decode json string failed ,json: ",json_in)
                 end

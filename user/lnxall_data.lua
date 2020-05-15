@@ -15,7 +15,7 @@ require "create"
 require "tracker"
 
 require "lnxall_conf"
-
+local status = require "status"
 
 cjson = require "cjson"
 bcd = require "bcd"
@@ -66,7 +66,10 @@ function inxallStart()
         input.sn = obj.sn
         input.time=os.time()
 
+        -- 记录下行命令
         ident_table[uid] = input
+        -- tx count
+        status.tx_add(obj.sn)
 
         log.info('immediate message sn:' .. obj.sn or '' .. 'identifier:' .. obj.identifier or '' .. 'mi:' .. obj.mi)
         local str = json.encode(input)
@@ -147,6 +150,15 @@ function inxallStart()
                 tags.identifier = nil
                 tags.term_addr = nil
                 output.tags = tags
+
+                if not v.identifier then
+                    -- rx count
+                    status.rx_add(output.sn)
+                else
+                    -- tx resp count
+                    status.resp_add(output.sn)
+                end
+
                 service_resopnse(json.encode(output))
             else
                 log.warn('raw data call protocol decode failed,error:' , func_ret)
