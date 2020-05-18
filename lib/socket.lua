@@ -359,10 +359,6 @@ function mt:close()
     if self.id then
         self.id:close()
         self.wait = "SOCKET_CLOSE"
-        while true do
-            result, reason = coroutine.yield()
-            if reason == "RESPONSE" then break end
-        end
     end
     if self.connected then
         self.connected = false
