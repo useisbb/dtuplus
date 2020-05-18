@@ -120,8 +120,8 @@ function mt:connect(address, port, timeout)
 
     self.address = address
     self.port = port
-    if self.protocol == 'TCP' then
-        client, err = ls.connect(address, port)
+    if self.protocol == 'TCP' or self.protocol == 'UDP' then
+        client, err = ls.connect(self.protocol,address, port)
         if not client then
             log.error("socket","connect error: "..err)
         end
@@ -152,10 +152,6 @@ function mt:connect(address, port, timeout)
         -- self.id = socket_connect_fnc(2, address, port, cert)
         -- self.sock = ls.connect("udp", address, port)
         log.error("socket","not support tcpssl protocol")
-    else
-        local err,msg = ls.bind(address, port)
-        if not err then log.error("socket","connect failed",msg,"tcp", address, port) return end
-        self.id = err
     end
 
     if not self.id then
