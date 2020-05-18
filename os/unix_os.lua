@@ -25,6 +25,11 @@ local function callback(timer)
     local id = timer.param
 end
 
+function unix.restart(...)
+    log.debug("============== 系统马上关闭 ============",...)
+    os.exit(0)
+end
+
 function unix.tick()
     return math.modf(chronos.nanotime()*1000)
 end

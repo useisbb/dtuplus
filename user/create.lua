@@ -340,19 +340,23 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
                         elseif string.match(packet.topic,"Set_RS485Cfg") then
                             log.info("===== receive rs485 config")
                             sys.publish("JJ_NET_RECV_" .. "Rs485",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 2)
+                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_NodesCfg") then
                             log.info("===== receive nodes config")
                             sys.publish("JJ_NET_RECV_" .. "NodesCfg",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 2)
+                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_NodesTemplate") then
                             log.info("===== receive template")
                             sys.publish("JJ_NET_RECV_" .. "NodesTemp",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 2)
+                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_Rglt") then
                             log.info("===== receive control command")
                             sys.publish("JJ_NET_RECV_" .. "DownLinkMsg",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/Rsp_Rglt',jjControlAck(packet.payload,0) or '', 2)
+                            mqttc:publish('G/' .. misc.getImei() .. '/Rsp_Rglt',jjControlAck(packet.payload,0) or '', 0)
+                        elseif string.match(packet.topic,"Set_GWRst") then
+                            log.info("===== receive remote restart")
+                            sys.publish("JJ_NET_RECV_" .. "Rstart",packet.payload)
+                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         end
                     end
 

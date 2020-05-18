@@ -868,6 +868,11 @@ function JJ_Msg_subscribe()
             for i=1,#config do default.reload_uart(i,config) end
         end
     end)
+    sys.subscribe("JJ_NET_RECV_" .. "Rstart", function()
+            sys.timerStart(function()
+                sys.restart("远程重启命令重启!!!")
+            end,3*1000)
+        end)
     sys.timerLoopStart(function()
         if login and login == 'login' then
             if lost_count > 5 then login = nil log.warn('disconnect platform by heart beat timeout',status) end
