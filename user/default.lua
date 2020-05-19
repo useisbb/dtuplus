@@ -52,6 +52,8 @@ local login = nil
 local confirmBuff = {{}, {}}
 -- 串口confirm空闲标记
 local confirmIdle = {true, true}
+-- 远程日志地址
+local remote_addr = "udp://10.3.1.217:12345"
 -- 配置文件
 local dtu = {
     host = "", -- 自定义参数服务器
@@ -842,7 +844,36 @@ if lnxall_conf.lx_mqtt then
     table.insert(dtu.conf,lnxall_conf.lx_mqtt )
 end
 
-
+-- log.set_remote_log_level(log.LOGLEVEL_WARN)
+sys.taskInit(function()
+    if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
+    local protocol = remote_addr:match("(%a+)://")
+    if protocol~="http" and protocol~="udp" and protocol~="tcp" then
+        log.error("errDump.request invalid protocol",protocol)
+        return
+    end
+    while true do
+        local log = log.get_remote_log()
+        if log then
+            if protocol=="http" then
+                http.request("POST",remote_addr,nil,nil,log,20000,httpPostCbFnc)
+                _,result = sys.waitUntil("ERRDUMP_HTTP_POST")
+            else
+                local host,port = remote_addr:match("://(.+):(%d+)$")
+                if not host then
+                    log.error("errDump.request invalid host port")
+                else
+                    local sck = protocol=="udp" and socket.udp() or socket.tcp()
+                    if sck:connect(host,port) then
+                        result = sck:send(log)
+                        sck:close()
+                    end
+                end
+            end
+        end
+        sys.wait(50)
+    end
+end)
 
 -- ---------------------------------------------------------- 参数配置,任务转发，线程守护主进程----------------------------------------------------------
 sys.taskInit(create.connect, pios, dtu.conf, dtu.reg, tonumber(dtu.convert) or 0, (tonumber(dtu.passon) == 0), dtu.upprot, dtu.dwprot)
