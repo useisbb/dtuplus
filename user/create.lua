@@ -357,6 +357,10 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
                             log.info("===== receive remote restart")
                             sys.publish("JJ_NET_RECV_" .. "Rstart",packet.payload)
                             mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                        elseif string.match(packet.topic,"Set_LogServerCfg") then
+                            log.info("===== receive remote log level setup")
+                            sys.publish("JJ_NET_RECV_" .. "Remote_log",packet.payload)
+                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         end
                     end
 

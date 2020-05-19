@@ -900,10 +900,20 @@ function JJ_Msg_subscribe()
         end
     end)
     sys.subscribe("JJ_NET_RECV_" .. "Rstart", function()
-            sys.timerStart(function()
-                sys.restart("远程重启命令重启!!!")
-            end,3*1000)
-        end)
+        sys.timerStart(function()
+            sys.restart("远程重启命令重启!!!")
+        end,3*1000)
+    end)
+    sys.subscribe("JJ_NET_RECV_" .. "Remote_log",function(payload)
+        -- if payload then io.writeFile(lnxall_conf.LNXALL_remote_log_cfg, payload) end
+        local obj = json.decode(payload)
+        -- "udp://10.3.1.217:12345"
+        if obj and obj.log_ip and obj.log_port and obj.log_proto and obj.log_level then remote_addr = string.format( "%s://%s:%s",obj.log_proto,obj.log_ip,obj.log_port)
+        else sys.warn("default","remote log param error!") return  end
+        if obj.log_level < 1 or obj.log_level > 8 then sys.warn("default","remote log level error!") return end
+        log.set_remote_log_level(obj.log_level)
+    end)
+
     sys.timerLoopStart(function()
         if login and login == 'login' then
             if lost_count > 5 then login = nil log.warn('disconnect platform by heart beat timeout',status) end

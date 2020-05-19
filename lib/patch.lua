@@ -12,7 +12,6 @@ json = require"json"
 cjson = require"cjson"
 module(..., package.seeall)
 
--- local str = '{"host": "mqtt.lnxall.com","port": 3883,"user": "localuser","pass": "dywl@galaxy"}'
 
 pack={}
 pack.pack=string.pack

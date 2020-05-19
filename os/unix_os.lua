@@ -47,7 +47,7 @@ function unix.set_trace_port(port)
 end
 
 function unix.poweron_reason()
-    return POWERON_CHARGER
+    return unix.POWERON_CHARGER
 end
 
 function unix.receive(msg_id)
@@ -93,6 +93,7 @@ end
 function unix.get_version()
     return "virtual luat"
 end
+
 
 return unix
 

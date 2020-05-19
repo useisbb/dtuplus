@@ -8,6 +8,7 @@
 module(..., package.seeall)
 -- 定义日志级别常量，可在main入口全局指定
 -- 例如： LOG_LEVEL=log.LOGLEVEL_WARN
+
 LOG_SILENT = 0x00;
 LOGLEVEL_TRACE = 0x01;
 LOGLEVEL_DEBUG = 0x02;
@@ -20,6 +21,22 @@ LOGLEVEL_FATAL = 0x06;
 local LEVEL_TAG = {'T', 'D', 'I', 'W', 'E', 'F'}
 local PREFIX_FMT = "[%s]-[%s]"
 
+-- 映射syslog 和 luat log的关系,index 是syslog level,value是 luat level
+local SYSLOG_REMAP={
+    LOG_SILENT,
+    LOGLEVEL_FATAL,
+    LOGLEVEL_FATAL,
+    LOGLEVEL_ERROR,
+    LOGLEVEL_WARN,
+    LOGLEVEL_INFO,
+    LOGLEVEL_DEBUG,
+    LOGLEVEL_TRACE}
+local REMOTE_LEVEL_TAG = {'T', 'D', 'I', 'W', 'E', 'F'}
+local REMOTE_LOG_LEVEL = LOG_SILENT
+
+local REMOTE_BUFF_MAX = 50
+local remote_log_buff={}
+
 --- 内部函数，支持不同级别的log打印及判断
 -- @param level ，日志级别，可选LOGLEVEL_TRACE，LOGLEVEL_DEBUG等
 -- @param tag   ，模块或功能名称(标签），作为日志前缀
@@ -31,14 +48,42 @@ local function _log(level, tag, ...)
     -- INFO 作为默认日志级别
     local OPENLEVEL = LOG_LEVEL and LOG_LEVEL or LOGLEVEL_INFO
     -- 如果日志级别为静默，或设定级别更高，则不输出日志
-    if OPENLEVEL == LOG_SILENT or OPENLEVEL > level then return end
-    -- 日志打印输出
-    local prefix = string.format(PREFIX_FMT, LEVEL_TAG[level], type(tag)=="string" and tag or "")
-    print(prefix, ...)
+    if (OPENLEVEL == LOG_SILENT or OPENLEVEL > level) == false then
+        -- 日志打印输出
+        local prefix = string.format(PREFIX_FMT, LEVEL_TAG[level], type(tag)=="string" and tag or "")
+        print(prefix, ...)
+    end
+    -- 如果日志级别为静默，或设定级别更高，则不输出日志
+    if (REMOTE_LOG_LEVEL == LOG_SILENT or REMOTE_LOG_LEVEL > level) == false then
+        -- 日志打印输出
+        local prefix = string.format("[%s]-[%s]", REMOTE_LEVEL_TAG[level], type(tag)=="string" and tag or "")
+        if #remote_log_buff > REMOTE_BUFF_MAX then table.remove(remote_log_buff,1) end
+        local str = prefix
+        for _,i in pairs({...})  do     --此处的｛...｝表示可变参数构成的数组
+            if type(i) == "userdata" then
+                str = str .. "xxxx "
+            elseif type(i) == "boolean" then
+                str = str .. i and "true " or "false "
+            else
+                str = str .. i .. " "
+            end
+        end
+        table.insert(remote_log_buff,str)
+    end
 
 -- TODO，支持hookup，例如对某级别日志做额外处理
 -- TODO，支持标签过滤
 end
+
+-- @level 1-8
+function set_remote_log_level(level)
+    REMOTE_LOG_LEVEL = SYSLOG_REMAP[level]
+end
+
+function get_remote_log()
+    return table.remove(remote_log_buff,1)
+end
+
 
 --- 输出trace级别的日志
 -- @param tag   ，模块或功能名称，作为日志前缀
@@ -114,17 +159,3 @@ function openTrace(v, uartid, baudrate)
 end
 
 
---- 输出debug级别的HEX数据打印
--- @param tag   ，模块或功能名称，作为日志前缀
--- @param p     ，hex数据指针
--- @param ...   ，日志内容，可变参数
--- @return nil
--- @usage debug_hex('moduleA',binary, 'log content')
-function debug_hex(tag,p, ...)
-    _log(LOGLEVEL_DEBUG, tag, ...)
-    local buff={}
-    local line
-    for i = 1, #p, LINESIZE do
-        table.insert(buff[uid], p:sub(i, i + LINESIZE - 1))
-    end
-end
