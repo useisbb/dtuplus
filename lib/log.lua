@@ -56,9 +56,9 @@ local function _log(level, tag, ...)
     -- 如果日志级别为静默，或设定级别更高，则不输出日志
     if (REMOTE_LOG_LEVEL == LOG_SILENT or REMOTE_LOG_LEVEL > level) == false then
         -- logstash 解析表达式
-        -- (?<level>(?:\S+)?)\s(?<timestamp>(?:\S+)?)\s([<])(?<tag>([a-zA-Z0-9\s]+)?)([>])([:])(?<message>([\S\s]+)?)
+        -- (?<host>(?:\S+)?)\s(?<level>(?:\S+)?)\s(?<timestamp>(?:\S+)?)\s([<])(?<tags>([a-zA-Z0-9\s]+)?)([>])(?<message>([\S\s]+)?)
         -- 日志打印输出
-        local prefix = string.format("%s %s <%s>:", REMOTE_LEVEL_TAG[level],os.date("%x-%X"), type(tag)=="string" and tag or "")
+        local prefix = string.format("%s %s %s <%s>",misc.getImei(), REMOTE_LEVEL_TAG[level],os.date("%x-%X"), type(tag)=="string" and tag or "")
         if #remote_log_buff > REMOTE_BUFF_MAX then table.remove(remote_log_buff,1) end
         local str = prefix
         for _,i in pairs({...})  do     --此处的｛...｝表示可变参数构成的数组
