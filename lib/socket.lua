@@ -155,10 +155,10 @@ function mt:connect(address, port, timeout)
     end
 
     if not self.id then
-        log.info("socket:connect: core sock conn error", self.protocol, address, port, self.cert)
+        log.error("socket:connect: core sock conn error", self.protocol, address, port, self.cert)
         return false
     end
-    log.info("socket:connect-coreid,prot,addr,port,cert,timeout", self.id, self.protocol, address, port, self.cert, timeout or 120)
+    -- log.info("socket:connect-coreid,prot,addr,port,cert,timeout", self.id, self.protocol, address, port, self.cert, timeout or 120)
     sockets[self.id] = self
     self.wait = "SOCKET_CONNECT"
     -- self.timerId = sys.timerStart(coroutine.resume, (timeout or 120) * 1000, self.co, false, "TIMEOUT")
@@ -169,7 +169,7 @@ function mt:connect(address, port, timeout)
     --     sys.publish("LIB_SOCKET_CONNECT_FAIL_IND", self.ssl, self.protocol, address, port)
     --     return false
     -- end
-    log.info("socket:connect: connect ok")
+    -- log.info("socket:connect: connect ok")
 
     if not self.connected then
         self.connected = true
@@ -272,7 +272,7 @@ function mt:send(data, timeout)
         log.warn('socket.client:send', 'error', self.error)
         return false
     end
-    log.debug("socket.send", "total " .. string.len(data or "") .. " bytes", "first 30 bytes", (data or ""):sub(1, 30))
+    -- log.debug("socket.send", "total " .. string.len(data or "") .. " bytes", "first 30 bytes", (data or ""):sub(1, 30))
     for i = 1, string.len(data or ""), SENDSIZE do
         -- 按最大MTU单元对data分包
         self.wait = "SOCKET_SEND"
@@ -353,7 +353,7 @@ function mt:close()
     end
     --此处不要再判断状态，否则在连接超时失败时，conneted状态仍然是未连接，会导致无法close
     --if self.connected then
-    log.info("socket:sock_close", self.id)
+    -- log.info("socket:sock_close", self.id)
     local result, reason
 
     if self.id then
