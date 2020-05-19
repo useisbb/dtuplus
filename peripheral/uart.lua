@@ -32,22 +32,22 @@ uart.port={{id = 1, handle = nil, name = "/dev/ttyUSB0",rxbuff={},sent=false},{i
 function uart.setup(id, baud, databits, parity, stopbits,msgmode,txDoneReport)
     if type(id) == "string" and id == uart.ATC  then  log.debug("peripheral-uart","AT虚拟串口配置") return end
     if not id or  not baud or not databits or  id < 1 or id > 2 then
-        log.error("peripheral-uart","串口配置参数错误",id, baud, databits)
+        log.error("peripheral-uart","input param set failed",id, baud, databits)
         return
     end
-    log.debug("peripheral-uart","物理串口配置",id)
+    log.debug("peripheral-uart","serial setup id:",id)
     log.info("peripheral-uart","id=" , id)
     log.info("peripheral-uart","baud=" , baud)
     log.info("peripheral-uart","databits=" , databits)
     log.info("peripheral-uart","parity=" , parity)
     log.info("peripheral-uart","stopbits=" , stopbits)
-    if not  msgmode or msgmode == 0 then log.info("peripheral-uart","使能接收消息事件") end
-    if txDoneReport and txDoneReport == 1 then log.info("peripheral-uart","使能发送完成消息事件") end
+    if not  msgmode or msgmode == 0 then log.info("peripheral-uart","received event enable") end
+    if txDoneReport and txDoneReport == 1 then log.info("peripheral-uart","sent event enable") end
     -- open port
     local e, p = rs232.open(uart.port[id].name)
     if e ~= rs232.RS232_ERR_NOERROR then
         -- handle error
-        log.error("peripheral-uart","串口配置参数错误",id, uart.port[id].name)
+        log.error("peripheral-uart","input param set failed",id, uart.port[id].name)
         return
     else
         uart.port[id].handle = p
@@ -61,9 +61,9 @@ function uart.setup(id, baud, databits, parity, stopbits,msgmode,txDoneReport)
 end
 
 function uart.write(id, ...)
-    log.debug("peripheral-uart",string.format("串口[%d] write",id))
+    log.debug("peripheral-uart",string.format("serial[%d] write",id))
     if not uart.port[id].handle then
-        log.error("peripheral-uart",string.format("串口[%d] write failed,port not open",id))
+        log.error("peripheral-uart",string.format("serial[%d] write failed,port not open",id))
         return
     end
     for i = 1, select('#', ... ) do
@@ -81,13 +81,13 @@ end
 
 function uart.getchar(id)
     local data = 0x31
-    log.debug("peripheral-uart",string.format("串口[%d] getchar",id))
+    log.debug("peripheral-uart",string.format("serial[%d] getchar",id))
     log.info("peripheral-uart",string.format("Hex:%X",data))
 end
 
 
 function uart.read(id,fmt)
-    log.debug("peripheral-uart",string.format("串口[%d] read",id))
+    log.debug("peripheral-uart",string.format("serial[%d] read",id))
     -- local bin = '\2\3\5\6\2\4'
     -- local str = '1234567'
     -- table.insert( rxbuff,str)
@@ -104,11 +104,11 @@ function uart.read(id,fmt)
 end
 
 function uart.close(id)
-    log.debug("peripheral-uart",string.format("串口[%d] close",id))
+    log.debug("peripheral-uart",string.format("serial[%d] close",id))
 end
 
 function uart.set_rs485_oe(id,dir)
-    log.debug("peripheral-uart",string.format("串口[%d] dir %s",id,dir))
+    log.debug("peripheral-uart",string.format("serial[%d] dir %s",id,dir))
 end
 
 function uart.poll_uart()
