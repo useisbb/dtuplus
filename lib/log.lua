@@ -36,6 +36,8 @@ local REMOTE_LOG_LEVEL = LOG_SILENT
 
 local REMOTE_BUFF_MAX = 50
 local remote_log_buff={}
+-- 远程日志地址
+local remote_addr = "udp://192.168.1.1:12345"
 
 --- 内部函数，支持不同级别的log打印及判断
 -- @param level ，日志级别，可选LOGLEVEL_TRACE，LOGLEVEL_DEBUG等
@@ -58,7 +60,7 @@ local function _log(level, tag, ...)
         -- logstash 解析表达式
         -- (?<host>(?:\S+)?)\s(?<level>(?:\S+)?)\s(?<timestamp>(?:\S+)?)\s([<])(?<tags>([a-zA-Z0-9\s]+)?)([>])(?<message>([\S\s]+)?)
         -- 日志打印输出
-        local prefix = string.format("%s %s %s <%s>",misc.getImei(), REMOTE_LEVEL_TAG[level],os.date("%x-%X"), type(tag)=="string" and tag or "")
+        local prefix = string.format("%s/%s %s %s <%s>",misc.getImei(),device_id or"",REMOTE_LEVEL_TAG[level],os.date("%x-%X"), type(tag)=="string" and tag or "")
         if #remote_log_buff > REMOTE_BUFF_MAX then table.remove(remote_log_buff,1) end
         local str = prefix
         for _,i in pairs({...})  do     --此处的｛...｝表示可变参数构成的数组
@@ -77,9 +79,16 @@ local function _log(level, tag, ...)
 -- TODO，支持标签过滤
 end
 
+-- @addr tcp://192.168.1.1:12345
 -- @level 1-8
-function set_remote_log_level(level)
+function remote_cfg(addr,level)
+    if not addr or not level then return end
+    remote_addr = addr
     REMOTE_LOG_LEVEL = SYSLOG_REMAP[level]
+end
+
+function get_remote_addr()
+    return remote_addr
 end
 
 function get_remote_log()
