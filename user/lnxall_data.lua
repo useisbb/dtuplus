@@ -39,7 +39,7 @@ if io.exists(lnxall_conf.LNXALL_nodes_temp) then
 end
 
 local function service_resopnse(json)
-    log.info('report data to lnxall platform')
+    log.info("lnxall_data.date report",'report data to lnxall platform')
     sys.publish("JJ_NET_SEND_MSG_" .. "SevsData",json or '')
 end
 
@@ -47,9 +47,9 @@ function inxallStart()
     -- 网络数据->串口
     sys.subscribe("JJ_NET_RECV_" .. "DownLinkMsg",function(payload)
         local uid = 1 -- 串口1
-        log.debug(payload)
+        log.debug("lnxall_data.downlink",payload)
         if not payload then
-            log.warn('protocol module received control message from lnxall was nil')
+            log.warn("lnxall_data.downlink",'protocol module received control message from lnxall was nil')
             return
         end
         local obj = json.decode(payload)
@@ -57,10 +57,10 @@ function inxallStart()
         local output={}
         input.term_addr=lnxall_conf.sn2addr(obj and obj.sn or nil)
         if not input.term_addr then
-            log.warn("sn:" .. obj.sn .. " couldn`t convert any term_ddr")
+            log.warn("lnxall_data.downlink","sn:" .. obj.sn .. " couldn`t convert any term_ddr")
             return
         end
-        log.info("device sn:" .. obj.sn .. " addr:" .. input.term_addr .. " cloud->uart")
+        log.info("lnxall_data.downlink","device sn:" .. obj.sn .. " addr:" .. input.term_addr .. " cloud->uart")
         input.identifier = obj.identifier
         input.mi = obj.mi
         input.sn = obj.sn
@@ -71,7 +71,7 @@ function inxallStart()
         -- tx count
         status.tx_add(obj.sn)
 
-        log.info('immediate message sn:' .. obj.sn or '' .. 'identifier:' .. obj.identifier or '' .. 'mi:' .. obj.mi)
+        log.info("lnxall_data.downlink",'immediate message sn:' .. obj.sn or '' .. 'identifier:' .. obj.identifier or '' .. 'mi:' .. obj.mi)
         local str = json.encode(input)
         local func = lnxall_conf.scriptEncodeBysn(obj.sn)
         if func then
@@ -87,17 +87,17 @@ function inxallStart()
                 output,ret = json.decode(json_str)
                 if not ret then
                     bin = string.fromHex(json_str)
-                    log.info('downlink binary message with hex string pack:',json_str)
+                    log.info("lnxall_data.downlink",'downlink binary message with hex string pack:',json_str)
                 else       -- base64数据
                     bin = output.b64_data and base64.decode(output.b64_data)
-                    log.info('downlink binary message with base64 of json:',json_str)
+                    log.info("lnxall_data.downlink",'downlink binary message with base64 of json:',json_str)
                 end
                 sys.publish("NET_RECV_WAIT_" .. uid,uid,bin)
             else
-                log.warn('raw data called protocol decode failed,error:' .. func_ret)
+                log.warn("lnxall_data.downlink",'raw data called protocol decode failed,error:' .. func_ret)
             end
         else
-            log.error('encode funtion of  protocol script was nil')
+            log.error("lnxall_data.downlink",'encode funtion of  protocol script was nil')
         end
     end)
 
@@ -105,7 +105,7 @@ function inxallStart()
     sys.subscribe("NET_SENT_RDY_" .. 1,function(rawdata)
         local uid = 1 -- 串口1
         if not rawdata then
-            log.warn('protocol module received raw data from uart was nil')
+            log.warn("lnxall_data.uplink",'protocol module received raw data from uart was nil')
             return
         end
         local input={}
@@ -127,11 +127,11 @@ function inxallStart()
         input.raw_data=string.toHex(rawdata)
         input.b64_data=base64.encode(rawdata)
         if valid and valid == true then --sn, identifier, mi 这些值在下行数据发送时被保存
-            log.info('downlink command or data response parse function')
+            log.info("lnxall_data.uplink",'downlink command or data response parse function')
             input.identifier=v.identifier
             func = lnxall_conf.scriptDecodeBysn(v.sn)
         else --主动上报,不能依赖下行保存信息
-            log.info('uplink data parse function')
+            log.info("lnxall_data.uplink",'uplink data parse function')
             v.mi = nil v.sn = nil v.identifier = nil
             func = lnxall_conf.scriptDecodeByport(uid)
         end
@@ -143,8 +143,8 @@ function inxallStart()
                 output.mi = v.mi or 0
                 output.timestamp = os.time()
                 output.sn = v.sn or lnxall_conf.addr2sn(tags and tags.term_addr or nil)
-                if not output.sn then log.error("term_addr:" .. tags.term_addr .. " couldn`t convert any sn")
-                else log.info("device sn:" .. output.sn .. " addr:" .. obj.term_addr .. " uart->cloud")
+                if not output.sn then log.error("lnxall_data.uplink","term_addr:" .. tags.term_addr .. " couldn`t convert any sn")
+                else log.info("lnxall_data.uplink","device sn:" .. output.sn .. " addr:" .. obj.term_addr .. " uart->cloud")
                 end
                 output.identifier = v.identifier or tags.identifier
                 tags.identifier = nil
@@ -161,10 +161,10 @@ function inxallStart()
 
                 service_resopnse(json.encode(output))
             else
-                log.warn('raw data call protocol decode failed,error:' , func_ret)
+                log.warn("lnxall_data.uplink",'raw data call protocol decode failed,error:' , func_ret)
             end
         else
-            log.error('decode funtion of protocol script was nil')
+            log.error("lnxall_data.uplink",'decode funtion of protocol script was nil')
         end
     end)
 end

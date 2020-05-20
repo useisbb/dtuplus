@@ -18,6 +18,7 @@ LNXALL_rs485=PREFIX_PATH .. '/lnxall/rs485_port_cfg.json'
 LNXALL_mqtt=PREFIX_PATH .. '/lnxall/mqtt_server.json'
 LNXALL_nodes_cfg=PREFIX_PATH .. '/lnxall/nodes_cfg.json'
 LNXALL_nodes_temp=PREFIX_PATH .. '/lnxall/templates_cfg.json'
+LNXALL_remote_log_cfg=PREFIX_PATH .. '/lnxall/remote_log_cfg.json'
 
 local parity_map={}
 -- lnxall 0 -> luat 2
@@ -86,7 +87,7 @@ if io.exists(LNXALL_mqtt) then
         lx_mqtt[6] = dat['user'] or ''
         lx_mqtt[7] = dat['pass'] or ''
     else
-        log.info('mqtt config file error, ',err)
+        log.info("lnxall_config.mqtt",'mqtt config file error, ',err)
     end
 end
 
@@ -100,18 +101,18 @@ end
 local function cbFncFile(result,prompt,head,filePath)
     if result and head then
         for k,v in pairs(head) do
-            log.info("http.cbFncFile",k..": "..v)
+            log.info("lnxall_config.download","http.cbFncFile",k..": "..v)
         end
     end
     if result and filePath then
         --输出文件内容，如果文件太大，一次性读出文件内容可能会造成内存不足，分次读出可以避免此问题
         local size = io.fileSize(filePath)
-        log.info(string.format("download file name:%s ,size:%d Bytes ",filePath,size))
+        log.info("lnxall_config.download",string.format("download file name:%s ,size:%d Bytes ",filePath,size))
         if size<=1024*20 then
             local body = io.readFile(filePath)
             sys.publish(filePath,body) --用文件名做消息id
         else
-            log.warn("File too large,bytes:",lua_str)
+            log.warn("lnxall_config.download","File too large,bytes:",lua_str)
         end
     end
     -- 如果是临时文件直接删除
@@ -121,7 +122,7 @@ end
 -- 注意:saveFile 存放路径不能是/download/,否则文件不能被下载
 function download(link , saveFile,timeout)
     if link then
-        log.info('download : ' .. link,saveFile)
+        log.info("lnxall_config.download",'download : ' .. link,saveFile)
         -- 如果没有传进来需要保存的文件名,是临时文件
 
         local file = saveFile or string.format( "%s/%s",TMP_DIR,lnxall_conf.getUrlFileName(link) or "")
@@ -130,14 +131,14 @@ function download(link , saveFile,timeout)
         if result and body and #body > 20 then
             if saveFile then
                 io.writeFile(saveFile, body)
-                log.warn('save nodes config file:',saveFile,#body)
+                log.warn("lnxall_config.download",'save nodes config file:',saveFile,#body)
             end
             return true,body
         else
-            log.error('download failed: ')
+            log.error("lnxall_config.download",'download failed: ')
         end
     else
-        log.error('download failed, link:',link)
+        log.error("lnxall_config.download",'download failed, link:',link)
     end
     return false
 end
@@ -147,7 +148,7 @@ function downloadByJson(json_str, saveFile,timeout)
     if obj and obj.URL then
         return download(obj.URL,saveFile,timeout)
     else
-        log.error('download by json.URL failed, json:',json_str)
+        log.error("lnxall_config.download",'download by json.URL failed, json:',json_str)
     end
     return false
 end
@@ -160,7 +161,7 @@ function sn2addr(sn)
             end
         end
     else
-        log.error('sn2addr must with sn')
+        log.error("lnxall_config.sn2addr",'sn2addr must with sn')
     end
     return nil
 end
@@ -173,7 +174,7 @@ function addr2sn(term_addr)
             end
         end
     else
-        log.error('addr2sn must with term_addr')
+        log.error("lnxall_config.ddr2sn",'addr2sn must with term_addr')
     end
     return nil
 end
@@ -201,17 +202,16 @@ local function require_modules(modules)
                 res, msg = pcall(loadstring(string.format( "%s = require \"%s\"\n",part[2],part[1])))
             end
             if res and res == true then
-                log.info('require template module:' .. v .. ' success')
+                log.info("lnxall_config.dy_require",'require template module:' .. v .. ' success')
             else
-                log.warn('require template module:' .. v .. ' failed,error' .. msg)
+                log.warn("lnxall_config.dy_require",'require template module:' .. v .. ' failed,error' .. msg)
             end
         end
     end
 end
 
 local function bind_module_func(modules)
-    -- log.info("load nodes template size:",#nodes_temp,json.encode(nodes_temp))
-    -- log.info("load nodes config size:",#nodes_cfg,json.encode(nodes_cfg))
+
     for k,v in ipairs(modules)do
         -- 通过脚本名称找模板id->用模板id找设备模板->对设备模板赋值
         local bind = string.format('\
@@ -230,19 +230,19 @@ local function bind_module_func(modules)
             end\
         end\n'
         ,v,v,v,v,v)
-        log.debug("called module name:",bind,loadstring(bind))
+        log.debug("lnxall_config.bind.module","called module name:",bind,loadstring(bind))
         local res, msg = pcall(loadstring(bind))
         if res and res == true then
-            log.info('bind protocol to device,module:' .. v .. ' success')
+            log.info("lnxall_config.bind.module",'bind protocol to device,module:' .. v .. ' success')
         else
-            log.warn('bind protocol to device,module:' .. v .. ' failed,error ' .. msg)
+            log.warn("lnxall_config.bind.module",'bind protocol to device,module:' .. v .. ' failed,error ' .. msg)
         end
 
     end
 
     for k,v in ipairs(nodes_cfg)do
         if v then
-            log.info("====== load func =====",v['sn'],v['protocol_encode'],v['protocol_decode'])
+            log.info("lnxall_config.bind.module",v['sn'],v['protocol_encode'],v['protocol_decode'])
         end
     end
 end
@@ -272,7 +272,7 @@ local function parser_period_service()
 
     for k,v in ipairs(period_list)do
         if v then
-            log.info("====== load period service =====",v.sn,v.identifier,v.intv_sample)
+            log.info("lnxall_config.period_service",v.sn,v.identifier,v.intv_sample)
             sys.timerLoopStart(function()
                 local obj = {}
                 obj.identifier =  v.identifier
@@ -309,21 +309,38 @@ function get_uart_param()
             end
             return rs_485
         else
-            log.info('485 config file error, ',err)
+            log.error("lnxall_config.uart",'485 config file error, ',err)
+        end
+    end
+    return nil
+end
+
+function remote_log_param()
+    if io.exists(LNXALL_remote_log_cfg) then
+        local obj, res, err = json.decode(io.readFile(LNXALL_remote_log_cfg) or '')
+        if res and obj then
+            local addr
+            if obj and obj.log_ip and obj.log_port and obj.log_proto and obj.log_level then
+                addr = string.format( "%s://%s:%s",obj.log_proto,obj.log_ip,obj.log_port)
+            else sys.warn("default","remote log param error!") return  end
+            if obj.log_level < 1 or obj.log_level > 8 then sys.warn("default","remote log level error!") return end
+            return addr,obj.log_level
+        else
+            log.error("lnxall_config.log",'remote log config file error, ',err)
         end
     end
     return nil
 end
 
 function reload()
-    log.info("====== lnxall config reload ======")
+    log.info("lnxall_config.reload","lnxall config reload")
     if io.exists(lnxall_conf.LNXALL_nodes_cfg) then
         nodes_cfg = nil
         local dat, res, err = json.decode(io.readFile(lnxall_conf.LNXALL_nodes_cfg) or '')
-        log.info("load nodes config size:",json.encode(dat),dat, res, err)
+        log.info("lnxall_config.nodes_cfg","load nodes config size:",json.encode(dat),dat, res, err)
         nodes_cfg= dat.nodes_cfg
         _G.nodes_cfg = nodes_cfg
-        log.info("load nodes config size:",#nodes_cfg,json.encode(nodes_cfg))
+        log.info("lnxall_config.nodes_cfg","load nodes config size:",#nodes_cfg,json.encode(nodes_cfg))
     end
 
     if io.exists(lnxall_conf.LNXALL_nodes_temp) then
@@ -333,7 +350,7 @@ function reload()
         local dat, res, err = json.decode(io.readFile(lnxall_conf.LNXALL_nodes_temp) or '')
         nodes_temp= dat.template_cfg
         _G.nodes_temp = nodes_temp
-        log.info("load nodes template size:",#nodes_temp,json.encode(nodes_temp))
+        log.info("lnxall_config.nodes_template","load nodes template size:",#nodes_temp,json.encode(nodes_temp))
 
         -- 在模板里找出,模板名字
         for k,v in ipairs(nodes_temp)do
@@ -341,11 +358,11 @@ function reload()
                 local part = v.parser_url:split("/")
                 if part and #part >= 0 then
                     local file = part[#part]
-                    log.info('parser script name of nodes template:', file)
+                    log.info("lnxall_config.nodes_template",'parser script name of nodes template:', file)
                     table.insert(template_module_name,string.match(file,'(.+).lua'))
                 end
             else
-                log.warn('cound`t parser script in nodes template:', v['template_id'])
+                log.warn("lnxall_config.nodes_template",'cound`t parser script in nodes template:', v['template_id'])
             end
         end
 
@@ -421,7 +438,7 @@ function scriptDecodeByport(port)
         local template_ids = {}
         local protocol_decode = nil
         local port_name = (type(port) == 'number') and string.format( "RS485_%d",port) or port
-        log.info("request script with port name",port_name)
+        log.info("lnxall_config.fetch_script","fetch script with port name",port_name)
         for _,node in ipairs(nodes_cfg) do  --确认模板被应用的设备有哪些
             if node.connect_port == port_name then
                 local found = false
@@ -432,8 +449,8 @@ function scriptDecodeByport(port)
                 if not found then table.insert(template_ids,node.template_id) end --记录模板ID
             end
         end
-        if #template_ids == 0 then log.warn(string.format("no one template bind port:%s",port_name)) return nil
-        elseif #template_ids > 1 then log.warn(string.format("mulit template bind port:%s",port_name)) return nil
+        if #template_ids == 0 then log.warn("lnxall_config.fetch_script",string.format("no one template bind port:%s",port_name)) return nil
+        elseif #template_ids > 1 then log.warn("lnxall_config.fetch_script",string.format("mulit template bind port:%s",port_name)) return nil
         else return protocol_decode
         end
     end

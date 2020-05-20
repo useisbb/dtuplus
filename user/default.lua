@@ -52,8 +52,6 @@ local login = nil
 local confirmBuff = {{}, {}}
 -- 串口confirm空闲标记
 local confirmIdle = {true, true}
--- 远程日志地址
-local remote_addr = "udp://10.3.1.217:12345"
 -- 配置文件
 local dtu = {
     host = "", -- 自定义参数服务器
@@ -847,9 +845,11 @@ end
 -- log.set_remote_log_level(log.LOGLEVEL_WARN)
 sys.taskInit(function()
     if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
+    log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
+    local remote_addr = log.get_remote_addr()
     local protocol = remote_addr:match("(%a+)://")
     if protocol~="http" and protocol~="udp" and protocol~="tcp" then
-        log.error("errDump.request invalid protocol",protocol)
+        log.error("remote.log","remote log request invalid protocol",protocol)
         return
     end
     while true do
@@ -861,7 +861,7 @@ sys.taskInit(function()
             else
                 local host,port = remote_addr:match("://(.+):(%d+)$")
                 if not host then
-                    log.error("errDump.request invalid host port")
+                    log.error("remote.log","request invalid host port")
                 else
                     local sck = protocol=="udp" and socket.udp() or socket.tcp()
                     if sck:connect(host,port) then
@@ -885,8 +885,6 @@ function JJ_Msg_subscribe()
         if status then
             login = 'login'
             lost_count = 0
-        else
-            log.warn('login to platform failed,check your account or imei',status)
         end
     end)
     sys.subscribe("JJ_NET_RECV_" .. "Active",function()
@@ -905,13 +903,8 @@ function JJ_Msg_subscribe()
         end,3*1000)
     end)
     sys.subscribe("JJ_NET_RECV_" .. "Remote_log",function(payload)
-        -- if payload then io.writeFile(lnxall_conf.LNXALL_remote_log_cfg, payload) end
-        local obj = json.decode(payload)
-        -- "udp://10.3.1.217:12345"
-        if obj and obj.log_ip and obj.log_port and obj.log_proto and obj.log_level then remote_addr = string.format( "%s://%s:%s",obj.log_proto,obj.log_ip,obj.log_port)
-        else sys.warn("default","remote log param error!") return  end
-        if obj.log_level < 1 or obj.log_level > 8 then sys.warn("default","remote log level error!") return end
-        log.set_remote_log_level(obj.log_level)
+        if payload then io.writeFile(lnxall_conf.LNXALL_remote_log_cfg, payload) end
+        log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
     end)
 
     sys.timerLoopStart(function()
@@ -939,7 +932,7 @@ sys.taskInit(function()
         result, data = sys.waitUntil("JJ_NET_RECV_" .. "NodesCfg",100)
         if result and result == true and data then
             if not lnxall_conf.downloadByJson(data,lnxall_conf.LNXALL_nodes_cfg,2000) then
-                log.warn('download nodes config files failed!',status)
+                log.warn("node.config",'download nodes config files failed!',status)
             end
             -- 设定一定的延迟生效,如果有配置推送过来从新延迟
             if sys.timerIsActive(reload) then sys.timerStop(reload) end
@@ -970,13 +963,13 @@ sys.taskInit(function()
                             local part = temp.parser_url:split("/")
                             if part and #part >= 0 then
                                 local file = part[#part]
-                                log.info("script name:" .. file)
+                                log.info("node.template","script name:" .. file)
                                 if not file then log.warn("template parser_url: " .. temp.parser_url .. ' split index: ' .. #part .. 'failed') break end
                                 -- 文件下载包本地
                                 local ret,lua_str = lnxall_conf.download(temp.parser_url)
-                                -- log.info("download template script file:" .. lua_str)
+                                -- log.info("node.template","download template script file:" .. lua_str)
                                 if not ret or ret == false then
-                                    log.warn("download link:" .. temp.parser_url .. ' failed')
+                                    log.warn("node.template","download link:" .. temp.parser_url .. ' failed')
                                 else
                                     local suffix = "\
                                     modules={}\
@@ -985,32 +978,32 @@ sys.taskInit(function()
                                     return modules\n"
                                     lua_str = lua_str .. suffix
                                     local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH or "","/lua",file)
-                                    log.info('nodes templates script file: ',lua_path,#lua_str)
+                                    log.info("node.template",'nodes templates script file: ',lua_path,#lua_str)
                                     io.writeFile(lua_path, lua_str)
                                     lua_str = nil suffix = nil
                                     collectgarbage("collect")
                                 end
                             else
-                                log.warn("template url split failed,url: ",temp.parser_url)
+                                log.warn("node.template","template url split failed,url: ",temp.parser_url)
                             end
                         else
-                            log.warn("parser_url be must required,template:" .. "")
+                            log.warn("node.template","parser_url be must required,template:" .. "")
                         end
                     end
 
                     -- 保存经过删除的配置
                     io.writeFile(lnxall_conf.LNXALL_nodes_temp, cjson.encode(obj))
-                    log.info('nodes templates file' .. cjson.encode(obj))
+                    log.info("node.template",'nodes templates file' .. cjson.encode(obj))
                     json_in = nil obj = nil
                     collectgarbage("collect")
                     -- 设定一定的延迟生效,如果有配置推送过来从新延迟
                     if sys.timerIsActive(reload) then sys.timerStop(reload) end
                     sys.timerStart(reload, 5000)
                 else
-                    log.warn("decode json string failed ,json: ",json_in)
+                    log.warn("node.template","decode json string failed ,json: ",json_in)
                 end
             else
-                log.error("download nodes template failed ,json body: ",json_in)
+                log.error("node.template","download nodes template failed ,json body: ",json_in)
             end
         end
     end
@@ -1019,7 +1012,7 @@ end)
 function reload_uart(i, uconf)
     local id = (is8910 and i == 2) and 3 or i
     if id == 3 then return end
-    log.info("====== uart config ======",i,json.encode(uconf))
+    log.info("reload.uart",i,json.encode(uconf))
     uart.close(id)
     uart.setup(id, uconf[i][2], uconf[i][3], uconf[i][4], uconf[i][5], nil, 1)
     uart.on(i, "sent", writeDone)
