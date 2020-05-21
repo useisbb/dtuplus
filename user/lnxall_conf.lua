@@ -363,9 +363,9 @@ function transparent_param()
 
                     }
                     table.insert( configs,tmp)
-                    return configs
                 end
             end
+            return configs
         else
             log.error("lnxall_config.transparent",'transparent config file error, ',err)
         end
