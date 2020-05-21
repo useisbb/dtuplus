@@ -37,7 +37,7 @@ local REMOTE_LOG_LEVEL = LOG_SILENT
 local REMOTE_BUFF_MAX = 50
 local remote_log_buff={}
 -- 远程日志地址
-local remote_addr = "udp://192.168.1.1:12345"
+local remote_addr = ""
 
 --- 内部函数，支持不同级别的log打印及判断
 -- @param level ，日志级别，可选LOGLEVEL_TRACE，LOGLEVEL_DEBUG等

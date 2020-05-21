@@ -319,12 +319,12 @@ sys.timerLoopStart(function()
         if flowCount[1] > flow then
             uart.on(1, "receive")
             uart.close(1)
-            log.info("uart1.read length count:", flowCount[1])
+            log.info("uart","uart1.read length count:", flowCount[1])
         end
         if flowCount[2] > flow then
             uart.on(2, "receive")
             uart.close(2)
-            log.info("uart2.read length count:", flowCount[2])
+            log.info("uart","uart2.read length count:", flowCount[2])
         end
     end
     if timecnt > 60 then
@@ -342,13 +342,13 @@ function write(uid, str)
         for i = 1, #str, SENDSIZE do
             table.insert(writeBuff[uid], str:sub(i, i + SENDSIZE - 1))
         end
-        log.warn("uart" .. uid .. ".write data length:", writeIdle[uid], #str)
+        log.info("uart","uart" .. uid .. ".write data length:", writeIdle[uid], #str)
     end
     if writeIdle[uid] and writeBuff[uid][1] then
         if 0 ~= uart.write(uid, writeBuff[uid][1]) then
             table.remove(writeBuff[uid], 1)
             writeIdle[uid] = false
-            log.warn("UART_" .. uid .. "writing ...")
+            log.debug("uart","UART_" .. uid .. " writing ...")
         end
     end
 end
@@ -356,12 +356,12 @@ end
 local function writeDone(uid)
     if #writeBuff[uid] == 0 then
         writeIdle[uid] = true
-        sys.publish("UART_" .. uid .. "_WRITE_DONE")
-        log.warn("UART_" .. uid .. "write done!")
+        sys.publish("uart","UART_" .. uid .. "_WRITE_DONE")
+        log.debug("uart","UART_" .. uid .. " write done!")
     else
         writeIdle[uid] = false
         uart.write(uid, table.remove(writeBuff[uid], 1))
-        log.warn("UART_" .. uid .. "writing ...")
+        log.debug("uart","UART_" .. uid .. " writing ...")
     end
 end
 
@@ -851,33 +851,40 @@ end
 -- log.set_remote_log_level(log.LOGLEVEL_WARN)
 sys.taskInit(function()
     if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
-    log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
-    local remote_addr = log.get_remote_addr()
-    local protocol = remote_addr:match("(%a+)://")
-    if protocol~="http" and protocol~="udp" and protocol~="tcp" then
-        log.error("remote.log","remote log request invalid protocol",protocol)
-        return
-    end
     while true do
-        local log = log.get_remote_log()
-        if log then
-            if protocol=="http" then
-                http.request("POST",remote_addr,nil,nil,log,20000,httpPostCbFnc)
-                _,result = sys.waitUntil("ERRDUMP_HTTP_POST")
-            else
-                local host,port = remote_addr:match("://(.+):(%d+)$")
-                if not host then
-                    log.error("remote.log","request invalid host port")
+        local remote_addr = nil
+        if log.remote_cfg and type(log.remote_cfg) == "function" then
+            log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
+            remote_addr = log.get_remote_addr()
+        end
+        local protocol = remote_addr:match("(%a+)://")
+        sys.wait(2000)
+        while true do
+            if not remote_addr or remote_addr == "" then break end
+            if protocol~="http" and protocol~="udp" and protocol~="tcp" then
+                log.error("remote.log","remote log request invalid protocol",protocol)
+                break
+            end
+            local log = log.get_remote_log()
+            if log then
+                if protocol=="http" then
+                    http.request("POST",remote_addr,nil,nil,log,20000,httpPostCbFnc)
+                    _,result = sys.waitUntil("ERRDUMP_HTTP_POST")
                 else
-                    local sck = protocol=="udp" and socket.udp() or socket.tcp()
-                    if sck:connect(host,port) then
-                        result = sck:send(log)
-                        sck:close()
+                    local host,port = remote_addr:match("://(.+):(%d+)$")
+                    if not host then
+                        log.error("remote.log","request invalid host port")
+                    else
+                        local sck = protocol=="udp" and socket.udp() or socket.tcp()
+                        if sck:connect(host,port) then
+                            result = sck:send(log)
+                            sck:close()
+                        end
                     end
                 end
             end
+            sys.wait(50)
         end
-        sys.wait(50)
     end
 end)
 
@@ -930,7 +937,10 @@ function JJ_Msg_subscribe()
     end)
     sys.subscribe("JJ_NET_RECV_" .. "Remote_log",function(payload)
         if payload then io.writeFile(lnxall_conf.LNXALL_remote_log_cfg, payload) end
-        log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
+        local remote_addr = nil
+        if log.remote_cfg and type(log.remote_cfg) == "function" then
+            log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
+        end
     end)
 
     sys.timerLoopStart(function()

@@ -123,14 +123,14 @@ function mt:connect(address, port, timeout)
     if self.protocol == 'TCP' or self.protocol == 'UDP' then
         client, err = ls.connect(self.protocol,address, port)
         if not client then
-            log.error("socket","connect error: "..err)
+            log.error("socket","connect error: "..err,self.protocol,address, port)
         end
 
         -- wait for connect() to succeed or fail
         ls.select(nil, {client},10)
         ok, err = client:status()
         if not ok then
-            log.error("socket","connect error: "..err)
+            log.error("socket","connect error: "..err,self.protocol,address, port)
         end
         self.id = client
     elseif self.protocol == 'TCPSSL' then
