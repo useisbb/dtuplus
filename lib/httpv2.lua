@@ -6,6 +6,7 @@
 -- @release 2017.10.23
 require 'socket'
 require 'utils'
+require 'base64'
 module(..., package.seeall)
 
 local Content_type = {'application/x-www-form-urlencoded', 'application/json', 'application/octet-stream'}
@@ -91,9 +92,9 @@ function request(method, url, timeout, params, data, ctype, basic, headers, cert
     end
     -- 处理HTTP Basic Authorization 验证
     if auth then
-        headers['Authorization'] = 'Basic ' .. crypto.base64_encode(auth, #auth)
+        headers['Authorization'] = 'Basic ' .. base64.encode(auth)
     elseif type(basic) == 'string' then
-        headers['Authorization'] = 'Basic ' .. crypto.base64_encode(basic, #basic)
+        headers['Authorization'] = 'Basic ' .. base64.encode(basic)
     end
     -- 处理headers部分
     local str = ""
@@ -154,7 +155,7 @@ function request(method, url, timeout, params, data, ctype, basic, headers, cert
     -- 处理headers代码
     for k, v in string.gmatch(s:sub(idx + 1, offset), "(.-):%s*(.-)\r\n") do response_header[k] = v end
     local len = response_header["Content-Range"] and tonumber(response_header["Content-Range"]:match("/(%d+)")) or tonumber(response_header["Content-Length"]) or 2147483648
-    
+
     s = s:sub((offset or 0) + 1, -1)
     local cnt = #s
     if tonumber(response_code) == 200 or tonumber(response_code) == 206 then
