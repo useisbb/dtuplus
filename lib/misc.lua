@@ -11,8 +11,7 @@ module(..., package.seeall)
 local sn, imei, calib, ver, muid
 local setSnCbFnc,setImeiCbFnc,setClkCbFnc
 
-imei = "866714041473678"
-
+imei = string.gsub(io.readFile("imei.txt"),"\r\n","") or "866714041473678"
 local function timeReport()
     sys.publish("TIME_CLK_IND")
     sys.timerStart(setTimeReport,2000)
