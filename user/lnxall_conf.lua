@@ -10,7 +10,7 @@ module(..., package.seeall)
 
 
 -- PREFIX
-PREFIX_PATH="./luat_file"
+PREFIX_PATH= rtos.get_version() == "virtual luat" and "./luat_file" or ""
 LUA_DIR = PREFIX_PATH .. "/lua/"
 TMP_DIR= PREFIX_PATH .. '/download/'
 LNXALL_DIR=PREFIX_PATH .. '/lnxall/'

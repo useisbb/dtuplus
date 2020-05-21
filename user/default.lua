@@ -848,17 +848,20 @@ if lnxall_conf.lx_mqtt then
     table.insert(dtu.conf,lnxall_conf.lx_mqtt )
 end
 
--- log.set_remote_log_level(log.LOGLEVEL_WARN)
+-- 判断一下兼容lib库,如果没有新库不会报错
+if log.remote_cfg and type(log.remote_cfg) == "function" then
+    log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
+end
+
 sys.taskInit(function()
     if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
+
     while true do
         local remote_addr = nil
-        if log.remote_cfg and type(log.remote_cfg) == "function" then
-            log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
+        if log.get_remote_addr and type(log.get_remote_addr) == "function" then
             remote_addr = log.get_remote_addr()
         end
         local protocol = remote_addr:match("(%a+)://")
-        log.get_remote_log() -- 没有log配置,要清空缓存数据
         sys.wait(1000)
         while true do
             if not remote_addr or remote_addr == "" then break end
