@@ -155,12 +155,14 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
                     else
                         log.warn("transparent","socket data message head cound not match!")
                     end
-                    local pos = #data - #tail + 1
-                    log.info(string.sub(data,pos,-1):toHex())
-                    if tail and tail == string.sub(data,pos,-1) then
-                        data = string.sub(data,1,pos - 1)
-                    else
-                        log.warn("transparent","socket data message tail cound not match!")
+                    if tail then
+                        local pos = #data - #tail + 1
+                        log.info(string.sub(data,pos,-1):toHex())
+                        if tail == string.sub(data,pos,-1) then
+                            data = string.sub(data,1,pos - 1)
+                        else
+                            log.warn("transparent","socket data message tail cound not match!")
+                        end
                     end
                     log.debug("transparent","downlink message:",data:toHex())
                     sys.publish("NET_RECV_WAIT_" .. uid, uid, data)
