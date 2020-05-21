@@ -858,6 +858,7 @@ sys.taskInit(function()
             remote_addr = log.get_remote_addr()
         end
         local protocol = remote_addr:match("(%a+)://")
+        log.get_remote_log() -- 没有log配置,要清空缓存数据
         sys.wait(1000)
         while true do
             if not remote_addr or remote_addr == "" then break end
