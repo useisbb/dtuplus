@@ -435,7 +435,7 @@ rtos.on(rtos.MSG_SOCK_RECV_IND, function(msg)
     if sockets[msg.socket_index].wait == "+RECEIVE" then
         local temp = sockets[msg.socket_index].id:recv(msg.recv_len)
         -- log.debug("socket","socket.on",temp)
-        coroutine.resume(sockets[msg.socket_index].co, true, temp)
+        if temp then coroutine.resume(sockets[msg.socket_index].co, true, temp) end
     else -- 数据进缓冲区，缓冲区溢出采用覆盖模式
         if #sockets[msg.socket_index].input > INDEX_MAX then
             log.error("socket recv", "out of stack", "block")
