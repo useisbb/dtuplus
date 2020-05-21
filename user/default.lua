@@ -858,7 +858,7 @@ sys.taskInit(function()
             remote_addr = log.get_remote_addr()
         end
         local protocol = remote_addr:match("(%a+)://")
-        sys.wait(2000)
+        sys.wait(1000)
         while true do
             if not remote_addr or remote_addr == "" then break end
             if protocol~="http" and protocol~="udp" and protocol~="tcp" then
