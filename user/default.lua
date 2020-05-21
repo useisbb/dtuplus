@@ -651,62 +651,62 @@ function uart_INIT(i, uconf)
         uart.set_rs485_oe(i, default["dir" .. i])
     end
 end
--- ------------------------------------------------ 远程任务 ----------------------------------------------------------
--- -- 远程自动更新参数和更新固件任务每隔24小时检查一次
--- sys.taskInit(function()
---     local rst, code, head, body, url = false
---     while true do
---         rst = false
---         if not socket.isReady() and not sys.waitUntil("IP_READY_IND", 600000) then sys.restart("Network initialization failed!") end
---         if dtu.host and dtu.host ~= "" then
---             local param = {product_name = _G.PROJECT, param_ver = dtu.param_ver, imei = misc.getImei()}
---             code, head, body = httpv2.request("GET", dtu.host, 30000, param, nil, 1)
---         else
---             url = "dtu.openluat.com/api/site/device/" .. misc.getImei() .. "/param?product_name=" .. _G.PROJECT .. "&param_ver=" .. dtu.param_ver
---             code, head, body = httpv2.request("GET", url, 30000, nil, nil, 1, misc.getImei() .. ":" .. misc.getMuid())
---         end
---         if tonumber(code) == 200 and body then
---             -- log.info("Parameters issued from the server:", body)
---             local dat, res, err = json.decode(body)
---             if res and tonumber(dat.param_ver) ~= tonumber(dtu.param_ver) then
---                 io.writeFile(CONFIG, body)
---                 rst = true
---             end
---         end
+------------------------------------------------ 远程任务 ----------------------------------------------------------
+-- 远程自动更新参数和更新固件任务每隔24小时检查一次
+sys.taskInit(function()
+    local rst, code, head, body, url = false
+    while true do
+        rst = false
+        if not socket.isReady() and not sys.waitUntil("IP_READY_IND", 600000) then sys.restart("Network initialization failed!") end
+        if dtu.host and dtu.host ~= "" then
+            local param = {product_name = _G.PROJECT, param_ver = dtu.param_ver, imei = misc.getImei()}
+            code, head, body = httpv2.request("GET", dtu.host, 30000, param, nil, 1)
+        else
+            url = "dtu.openluat.com/api/site/device/" .. misc.getImei() .. "/param?product_name=" .. _G.PROJECT .. "&param_ver=" .. dtu.param_ver
+            code, head, body = httpv2.request("GET", url, 30000, nil, nil, 1, misc.getImei() .. ":" .. misc.getMuid())
+        end
+        if tonumber(code) == 200 and body then
+            -- log.info("Parameters issued from the server:", body)
+            local dat, res, err = json.decode(body)
+            if res and tonumber(dat.param_ver) ~= tonumber(dtu.param_ver) then
+                io.writeFile(CONFIG, body)
+                rst = true
+            end
+        end
 
---         -- 检查是否有更新程序
---         if tonumber(dtu.fota) == 1 then
---             if is4gLod and rtos.fota_start() == 0 then
---                 url = "iot.openluat.com/api/site/firmware_upgrade?project_key=" .. _G.PRODUCT_KEY
---                     .. "&imei=" .. misc.getImei() .. "&device_key=" .. misc.getSn()
---                     .. "&firmware_name=" .. _G.PROJECT .. "_" .. rtos.get_version() .. "&version=" .. _G.VERSION
---                 code, head, body = httpv2.request("GET", url, 30000, nil, nil, nil, nil, nil, nil, rtos.fota_process)
---                 if tonumber(code) == 200 or tonumber(code) == 206 then rst = true end
---                 rtos.fota_end()
---             elseif not is4gLod then
---                 url = "iot.openluat.com/api/site/firmware_upgrade?project_key=" .. _G.PRODUCT_KEY
---                     .. "&imei=" .. misc.getImei() .. "&device_key=" .. misc.getSn()
---                     .. "&firmware_name=" .. _G.PROJECT .. "_" .. rtos.get_version() .. "&version=" .. _G.VERSION
---                 code, head, body = httpv2.request("GET", url, 30000)
---                 if tonumber(code) == 200 and body and #body > 1024 then
---                     io.writeFile("/luazip/update.bin", body)
---                     rst = true
---                 end
---             end
---         end
---         if rst then sys.restart("DTU Parameters or firmware are updated!") end
---         ---------- 基站坐标查询 ----------
---         lbsLoc.request(function(result, lat, lng, addr)
---             if result then
---                 lbs.lat, lbs.lng = lat, lng
---                 create.setLocation(lat, lng)
---             end
---         end)
---         ---------- 启动网络任务 ----------
---         sys.publish("DTU_PARAM_READY")
---         log.warn("短信或电话请求更新:", sys.waitUntil("UPDATE_DTU_CNF", 86400000))
---     end
--- end)
+        -- 检查是否有更新程序
+        if tonumber(dtu.fota) == 1 then
+            if is4gLod and rtos.fota_start() == 0 then
+                url = "iot.openluat.com/api/site/firmware_upgrade?project_key=" .. _G.PRODUCT_KEY
+                    .. "&imei=" .. misc.getImei() .. "&device_key=" .. misc.getSn()
+                    .. "&firmware_name=" .. _G.PROJECT .. "_" .. rtos.get_version() .. "&version=" .. _G.VERSION
+                code, head, body = httpv2.request("GET", url, 30000, nil, nil, nil, nil, nil, nil, rtos.fota_process)
+                if tonumber(code) == 200 or tonumber(code) == 206 then rst = true end
+                rtos.fota_end()
+            elseif not is4gLod then
+                url = "iot.openluat.com/api/site/firmware_upgrade?project_key=" .. _G.PRODUCT_KEY
+                    .. "&imei=" .. misc.getImei() .. "&device_key=" .. misc.getSn()
+                    .. "&firmware_name=" .. _G.PROJECT .. "_" .. rtos.get_version() .. "&version=" .. _G.VERSION
+                code, head, body = httpv2.request("GET", url, 30000)
+                if tonumber(code) == 200 and body and #body > 1024 then
+                    io.writeFile("/luazip/update.bin", body)
+                    rst = true
+                end
+            end
+        end
+        if rst then sys.restart("DTU Parameters or firmware are updated!") end
+        ---------- 基站坐标查询 ----------
+        lbsLoc.request(function(result, lat, lng, addr)
+            if result then
+                lbs.lat, lbs.lng = lat, lng
+                create.setLocation(lat, lng)
+            end
+        end)
+        ---------- 启动网络任务 ----------
+        sys.publish("DTU_PARAM_READY")
+        log.warn("短信或电话请求更新:", sys.waitUntil("UPDATE_DTU_CNF", 86400000))
+    end
+end)
 
 -- sys.timerLoopStart(function()
 --     log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
