@@ -839,6 +839,12 @@ end
 
 -- 如果lx_mqtt存在,添加通道8
 if lnxall_conf.lx_mqtt then
+    local configs = lnxall_conf.transparent_param()
+    if configs then
+        for i,config in ipairs(configs) do
+        table.insert(dtu.conf,i,config)
+        end
+    end
     table.insert(dtu.conf,lnxall_conf.lx_mqtt )
 end
 
@@ -879,6 +885,11 @@ end)
 sys.taskInit(create.connect, pios, dtu.conf, dtu.reg, tonumber(dtu.convert) or 0, (tonumber(dtu.passon) == 0), dtu.upprot, dtu.dwprot)
 
 
+local function reload()
+    lnxall_conf.reload()
+    status.reload()
+end
+
 function JJ_Msg_subscribe()
     lost_count = 0
     sys.subscribe("JJ_NET_RECV_" .. "LoginRsp",function(status)
@@ -895,6 +906,21 @@ function JJ_Msg_subscribe()
         local config = lnxall_conf.get_uart_param()
         if config and #config > 0 then
             for i=1,#config do default.reload_uart(i,config) end
+        end
+    end)
+    sys.subscribe("JJ_NET_RECV_" .. "Transparent",function(payload)
+        local local_cfg = nil
+        if io.exists(lnxall_conf.LNXALL_transparent_cfg) then
+            local_cfg, res, err = json.decode(io.readFile(lnxall_conf.LNXALL_transparent_cfg) or '')
+        end
+        local remote_cfg, res, err = json.decode(payload)
+        -- 如果配置没变不重启
+        if not local_cfg or local_cfg.version ~= remote_cfg.version then
+            if payload then io.writeFile(lnxall_conf.LNXALL_transparent_cfg, payload) end
+            -- 设定一定的延迟生效,如果有配置推送过来从新延迟
+            sys.timerStart(function()
+                sys.restart("透传配置变更重启!!!")
+            end,3*1000)
         end
     end)
     sys.subscribe("JJ_NET_RECV_" .. "Rstart", function()
@@ -919,11 +945,6 @@ function JJ_Msg_subscribe()
             end
         end
     end, 60 * 1000)
-end
-
-local function reload()
-    lnxall_conf.reload()
-    status.reload()
 end
 
 sys.taskInit(function()

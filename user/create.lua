@@ -110,9 +110,12 @@ local function userapi(str, pios)
     end
 end
 ---------------------------------------------------------- SOKCET 服务 ----------------------------------------------------------
-local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, ping, timeout, addr, port, uid, gap, report, intervalTime, ssl, login)
+local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, ping, timeout, addr, port, uid, gap, report, intervalTime, ssl, login, head_hex , tail_hex)
+    log.debug(prot, ping, timeout, addr, port, uid, gap, report, intervalTime, ssl, login)
     cid, prot, timeout, uid = tonumber(cid) or 1, prot:upper(), tonumber(timeout) or 120, tonumber(uid) or 1
     if not ping or ping == "" then ping = "0x00" end
+    local head = head_hex and string.fromHex(head_hex) or nil
+    local tail = tail_hex and string.fromHex(tail_hex) or nil
     if tonumber(intervalTime) then sys.timerLoopStart(sys.publish, tonumber(intervalTime) * 1000, "AUTO_SAMPL_" .. uid) end
     local dwprotFnc = dwprot and dwprot[cid] and dwprot[cid] ~= "" and loadstring(dwprot[cid]:match("function(.+)end"))
     local upprotFnc = upprot and upprot[cid] and upprot[cid] ~= "" and loadstring(upprot[cid]:match("function(.+)end"))
@@ -122,7 +125,7 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
         local c = prot == "TCP" and socket.tcp(ssl and ssl:lower() == "ssl") or socket.udp()
         while not c:connect(addr, port) do sys.wait((2 ^ idx) * 1000)idx = idx > 9 and 0 or idx + 1 end
         -- 登陆报文
-        if login or loginMsg(reg) then c:send(login or loginMsg(reg)) end
+        if login or loginMsg(reg) then c:send(conver(login) or loginMsg(reg)) end
         interval[uid], samptime[uid] = tonumber(gap) or 0, tonumber(report) or 0
         while true do
             datalink = true
@@ -147,6 +150,19 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
                         sys.publish("NET_RECV_WAIT_" .. uid, uid, res and msg or data)
                     end
                 else -- 默认不转换
+                    if head and head == string.sub(data,1,#head) then
+                        data = string.sub(data,#head+1,-1)
+                    else
+                        log.warn("transparent","socket data message head cound not match!")
+                    end
+                    local pos = #data - #tail + 1
+                    log.info(string.sub(data,pos,-1):toHex())
+                    if tail and tail == string.sub(data,pos,-1) then
+                        data = string.sub(data,1,pos - 1)
+                    else
+                        log.warn("transparent","socket data message tail cound not match!")
+                    end
+                    log.debug("transparent","downlink message:",data:toHex())
                     sys.publish("NET_RECV_WAIT_" .. uid, uid, data)
                 end
             elseif data == ("NET_SENT_RDY_" .. (passon and cid or uid)) then
@@ -160,9 +176,12 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
                         if not c:send(res and msg or param) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_ERROR\r\n") end break end
                     end
                 else -- 默认不转换
+                    if head then param = head .. param end
+                    if tail then param = param .. tail end
+                    log.debug("transparent","downlink message:",data:toHex())
                     if not c:send(param) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_ERROR\r\n") end break end
                 end
-                if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_OK\r\n") end
+                if passon and passon == 1 then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_OK\r\n") end
             elseif data == "timeout" then
                 if not c:send(conver(ping)) then break end
             else
@@ -332,34 +351,30 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
                         if string.match(packet.topic,"Rsp_LogIn") then
                             if packet.payload then
                                 local obj = json.decode(packet.payload)
-                                log.info("===== login response",obj and (obj.error_code == 0))
                                 sys.publish("JJ_NET_RECV_" .. "LoginRsp", obj and (obj.error_code == 500))
                             end
                         elseif string.match(packet.topic,"Rsp_HeartBeat") then
                             sys.publish("JJ_NET_RECV_" .. "Active")
                         elseif string.match(packet.topic,"Set_RS485Cfg") then
-                            log.info("===== receive rs485 config")
                             sys.publish("JJ_NET_RECV_" .. "Rs485",packet.payload)
                             mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_NodesCfg") then
-                            log.info("===== receive nodes config")
                             sys.publish("JJ_NET_RECV_" .. "NodesCfg",packet.payload)
                             mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_NodesTemplate") then
-                            log.info("===== receive template")
                             sys.publish("JJ_NET_RECV_" .. "NodesTemp",packet.payload)
                             mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_Rglt") then
-                            log.info("===== receive control command")
                             sys.publish("JJ_NET_RECV_" .. "DownLinkMsg",packet.payload)
                             mqttc:publish('G/' .. misc.getImei() .. '/Rsp_Rglt',jjControlAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_GWRst") then
-                            log.info("===== receive remote restart")
                             sys.publish("JJ_NET_RECV_" .. "Rstart",packet.payload)
                             mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_LogServerCfg") then
-                            log.info("===== receive remote log level setup")
                             sys.publish("JJ_NET_RECV_" .. "Remote_log",packet.payload)
+                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                        elseif string.match(packet.topic,"Set_CommonSocketCfg") then
+                            sys.publish("JJ_NET_RECV_" .. "Transparent",packet.payload)
                             mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         end
                     end

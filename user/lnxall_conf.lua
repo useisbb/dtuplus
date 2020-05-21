@@ -19,6 +19,7 @@ LNXALL_mqtt=PREFIX_PATH .. '/lnxall/mqtt_server.json'
 LNXALL_nodes_cfg=PREFIX_PATH .. '/lnxall/nodes_cfg.json'
 LNXALL_nodes_temp=PREFIX_PATH .. '/lnxall/templates_cfg.json'
 LNXALL_remote_log_cfg=PREFIX_PATH .. '/lnxall/remote_log_cfg.json'
+LNXALL_transparent_cfg=PREFIX_PATH .. '/lnxall/transparent_cfg.json'
 
 local parity_map={}
 -- lnxall 0 -> luat 2
@@ -51,6 +52,10 @@ end
 if not io.exists(TMP_DIR) then
     rtos.make_dir(TMP_DIR)
 end
+
+-- -- 测试透传配置
+-- local str = '{"common_socket_cfg":[{"protocol_type":"TCP","socket_addr":"10.3.1.217","socket_port":12345,"binding_port":"RS485_1","frame_header":"02","frame_tail":"03","login_packet":"FF 0D 09 01","heartbeat_packet":"FF 0D 09 02","heartbeat_interval":300}]}'
+-- io.writeFile(LNXALL_transparent_cfg, str, 'w')
 
 -- -- 测试串口配置
 -- local str = '{"mi":63901221,"rs485_cfg":[{"disable":0,"parity":0,"port":"RS485_1","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_2","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_3","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1},{"disable":0,"parity":0,"port":"RS485_4","protocol":"GW_PROTC_MODBUS","speed":9600,"stop":1}],"timestamp":1587102806,"version":"uJloPlpCA3Bd"}'
@@ -322,11 +327,47 @@ function remote_log_param()
             local addr
             if obj and obj.log_ip and obj.log_port and obj.log_proto and obj.log_level then
                 addr = string.format( "%s://%s:%s",obj.log_proto,obj.log_ip,obj.log_port)
-            else sys.warn("default","remote log param error!") return  end
+            else log.warn("default","remote log param error!") return  end
             if obj.log_level < 1 or obj.log_level > 8 then sys.warn("default","remote log level error!") return end
             return addr,obj.log_level
         else
             log.error("lnxall_config.log",'remote log config file error, ',err)
+        end
+    end
+    return nil
+end
+
+
+function transparent_param()
+    if io.exists(LNXALL_transparent_cfg) then
+        local obj, res, err = json.decode(io.readFile(LNXALL_transparent_cfg) or '')
+        if res and obj and obj.common_socket_cfg and #obj.common_socket_cfg >= 1 then
+            local sockets = obj.common_socket_cfg
+            local configs={}
+            for i,socket in ipairs(sockets) do
+                if socket and socket.protocol_type and socket.socket_addr and socket.socket_port then
+                    tmp={
+                        socket.protocol_type,
+                        string.format("0x%s",socket.heartbeat_packet),
+                        socket.heartbeat_interval,
+                        socket.socket_addr,
+                        string.format("%d",socket.socket_port),
+                        tonumber(string.sub(socket.binding_port,7)),
+                        "",
+                        "",
+                        "",
+                        "",
+                        string.format("0x%s",socket.login_packet),
+                        socket.frame_header,
+                        socket.frame_tail
+
+                    }
+                    table.insert( configs,tmp)
+                    return configs
+                end
+            end
+        else
+            log.error("lnxall_config.transparent",'transparent config file error, ',err)
         end
     end
     return nil
