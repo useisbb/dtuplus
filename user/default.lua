@@ -1012,7 +1012,7 @@ sys.taskInit(function()
                                     function modules.protocol_encode(...)  return protocol_encode(...) end\
                                     return modules\n"
                                     lua_str = lua_str .. suffix
-                                    local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH or "","/lua",file)
+                                    local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH or "","lua",file)
                                     log.info("node.template",'nodes templates script file: ',lua_path,#lua_str)
                                     io.writeFile(lua_path, lua_str)
                                     lua_str = nil suffix = nil
