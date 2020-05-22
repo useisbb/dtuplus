@@ -130,7 +130,6 @@ function inxallStart()
             log.info("lnxall_data.uplink",'uplink data parse function')
             v.mi = nil v.sn = nil v.identifier = nil
             func = lnxall_conf.scriptDecodeByport(uid)
-            return
         end
         if func then
             local str = json.encode(input)
@@ -140,7 +139,7 @@ function inxallStart()
                 output.mi = v.mi or 0
                 output.timestamp = os.time()
                 output.sn = v.sn or lnxall_conf.addr2sn(tags and tags.term_addr or nil)
-                if not output.sn then log.error("lnxall_data.uplink","term_addr:" .. tags.term_addr .. " couldn`t convert any sn")
+                if not output.sn then log.error("lnxall_data.uplink", " couldn`t convert any sn" .. "term_addr:", tags.term_addr)
                 else log.info("lnxall_data.uplink","device sn:" .. output.sn .. " uart->cloud")
                 end
                 output.identifier = v.identifier or tags.identifier

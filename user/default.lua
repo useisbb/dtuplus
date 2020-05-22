@@ -853,6 +853,7 @@ if log.remote_cfg and type(log.remote_cfg) == "function" then
     log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
 end
 
+-- ---------------------------------------------------------- 远程日志线程 ----------------------------------------------------------
 sys.taskInit(function()
     if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
 
@@ -870,7 +871,7 @@ sys.taskInit(function()
                 break
             end
             local log = log.get_remote_log()
-            if log then
+            if log and not string.find(log,"socket") then  -- 不打印socket日志
                 if protocol=="http" then
                     http.request("POST",remote_addr,nil,nil,log,20000,httpPostCbFnc)
                     _,result = sys.waitUntil("ERRDUMP_HTTP_POST")

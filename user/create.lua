@@ -150,10 +150,12 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
                         sys.publish("NET_RECV_WAIT_" .. uid, uid, res and msg or data)
                     end
                 else -- 默认不转换
-                    if head and head == string.sub(data,1,#head) then
-                        data = string.sub(data,#head+1,-1)
-                    else
-                        log.warn("transparent","socket data message head cound not match!")
+                    if head then
+                        if head == string.sub(data,1,#head) then
+                            data = string.sub(data,#head+1,-1)
+                        else
+                            log.warn("transparent","socket data message head cound not match!")
+                        end
                     end
                     if tail then
                         local pos = #data - #tail + 1
