@@ -318,7 +318,10 @@ local function dispatch()
         if subscribers[message[1]] then
             for callback, _ in pairs(subscribers[message[1]]) do
                 if type(callback) == "function" then
-                    callback(unpack(message, 2, #message))
+                    local status,error = pcall(callback,unpack(message, 2, #message))
+                    if not status then
+                        assert(nil,error)
+                    end
                 elseif type(callback) == "thread" then
                     coroutine.resume(callback, unpack(message))
                 end
@@ -346,6 +349,7 @@ end
 -- @usage sys.run()
 function run()
     while true do
+        local status,error = true,nil
         -- 分发内部消息
         dispatch()
         -- 阻塞读取外部消息
@@ -374,11 +378,17 @@ function run()
             end
         --其他消息（音频消息、充电管理消息、按键消息等）
         elseif type(msg) == "number" then
-            handlers[msg](param)
+            -- handlers[msg](param)
+            status,error = pcall(handlers[msg],param)
         elseif msg.uid and msg.msgid and type(msg.uid) == "number" then  --增加串口消息
-            handlers[msg.msgid](param)
+            -- handlers[msg.msgid](param)
+            status,error = pcall(handlers[msg.msgid],param)
         else
-            handlers[msg.id](msg)
+            -- handlers[msg.id](msg)
+            status,error = pcall(handlers[msg.id],msg)
+        end
+        if not status then
+            assert(nil,error)
         end
     end
 end
