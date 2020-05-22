@@ -32,12 +32,12 @@ local SYSLOG_REMAP={
     LOGLEVEL_DEBUG,
     LOGLEVEL_TRACE}
 local REMOTE_LEVEL_TAG = {'T', 'D', 'I', 'W', 'E', 'F'}
-local REMOTE_LOG_LEVEL = LOG_SILENT
+local REMOTE_LOG_LEVEL = LOGLEVEL_ERROR
 
 local REMOTE_BUFF_MAX = 50
 local remote_log_buff={}
 -- 远程日志地址
-local remote_addr = ""
+local remote_addr = "udp://log.dyiots.com:514"
 
 --- 内部函数，支持不同级别的log打印及判断
 -- @param level ，日志级别，可选LOGLEVEL_TRACE，LOGLEVEL_DEBUG等

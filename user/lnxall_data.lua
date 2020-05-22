@@ -52,33 +52,29 @@ function inxallStart()
             log.warn("lnxall_data.downlink",'protocol module received control message from lnxall was nil')
             return
         end
-        local obj = json.decode(payload)
-        local input={}
+        local input= json.decode(payload) or {}
         local output={}
-        input.term_addr=lnxall_conf.sn2addr(obj and obj.sn or nil)
+        input.term_addr=lnxall_conf.sn2addr(input and input.sn or nil)
         if not input.term_addr then
-            log.warn("lnxall_data.downlink","sn:" .. obj.sn .. " couldn`t convert any term_ddr")
+            log.warn("lnxall_data.downlink","sn:" .. input.sn .. " couldn`t convert any term_ddr")
             return
         end
-        log.info("lnxall_data.downlink","device sn:" .. obj.sn .. " addr:" .. input.term_addr .. " cloud->uart")
-        input.identifier = obj.identifier
-        input.mi = obj.mi
-        input.sn = obj.sn
+        log.info("lnxall_data.downlink","device sn:" .. input.sn .. " addr:" .. input.term_addr .. " cloud->uart")
         input.time=os.time()
 
         -- 记录下行命令
         ident_table[uid] = input
         -- tx count
-        status.tx_add(obj.sn)
+        status.tx_add(input.sn)
 
-        log.info("lnxall_data.downlink",'immediate message sn:' .. obj.sn or '' .. 'identifier:' .. obj.identifier or '' .. 'mi:' .. obj.mi)
+        log.info("lnxall_data.downlink",'immediate message sn:' .. input.sn or '' .. 'identifier:' .. input.identifier or '' .. 'mi:' .. input.mi)
         local str = json.encode(input)
-        local func = lnxall_conf.scriptEncodeBysn(obj.sn)
+        local func = lnxall_conf.scriptEncodeBysn(input.sn)
         if func then
             -- 下面的json_str 其实是bin_str
             local ret,func_ret,json_str,json_len = pcall(func,str or '',str and #str or 0)
             if ret and ret == true and func_ret and json_str and func_ret == true or func_ret == 0 then
-                if lnxall_conf.portBysn(obj.sn) == 'RS485_1' then
+                if lnxall_conf.portBysn(input.sn) == 'RS485_1' then
                     uid = 1
                 end
 
@@ -134,6 +130,7 @@ function inxallStart()
             log.info("lnxall_data.uplink",'uplink data parse function')
             v.mi = nil v.sn = nil v.identifier = nil
             func = lnxall_conf.scriptDecodeByport(uid)
+            return
         end
         if func then
             local str = json.encode(input)
@@ -144,7 +141,7 @@ function inxallStart()
                 output.timestamp = os.time()
                 output.sn = v.sn or lnxall_conf.addr2sn(tags and tags.term_addr or nil)
                 if not output.sn then log.error("lnxall_data.uplink","term_addr:" .. tags.term_addr .. " couldn`t convert any sn")
-                else log.info("lnxall_data.uplink","device sn:" .. output.sn .. " addr:" .. obj.term_addr .. " uart->cloud")
+                else log.info("lnxall_data.uplink","device sn:" .. output.sn .. " uart->cloud")
                 end
                 output.identifier = v.identifier or tags.identifier
                 tags.identifier = nil
