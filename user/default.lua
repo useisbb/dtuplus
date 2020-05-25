@@ -883,12 +883,13 @@ sys.taskInit(function()
                         local sck = protocol=="udp" and socket.udp() or socket.tcp()
                         if sck:connect(host,port) then
                             result = sck:send(log)
+                            sys.wait(300)
                             sck:close()
                         end
                     end
                 end
             end
-            sys.wait(50)
+            sys.wait(100)
         end
     end
 end)
