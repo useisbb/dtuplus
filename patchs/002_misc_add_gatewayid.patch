@@ -1,0 +1,43 @@
+diff --git a/lib/misc.lua b/lib/misc.lua
+index 0935fb7..3fc4ba9 100755
+--- a/lib/misc.lua
++++ b/lib/misc.lua
+@@ -12,6 +12,9 @@ module(..., package.seeall)
+ -- calib 校准标志
+ local sn, imei, calib, ver, muid
+ local setSnCbFnc,setImeiCbFnc,setClkCbFnc
++local gateway_id = nil
++local run_mode = nil
++local product_name = nil
+ 
+ local function timeReport()
+     sys.publish("TIME_CLK_IND")
+@@ -226,3 +229,28 @@ req("AT+WISN?")
+ req("AT+CGSN")
+ req("AT+MUID?")
+ setTimeReport()
++
++
++function getGatewayID()
++    return gateway_id
++end
++
++function setGatewayID(id)
++    gateway_id = id
++end
++
++function getRunMode()
++    return run_mode
++end
++
++function setRunMode(mode)
++    run_mode = mode
++end
++
++function getProductName()
++    return product_name
++end
++
++function setProductName(name)
++    product_name = name
++end

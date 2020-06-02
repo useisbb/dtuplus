@@ -10,8 +10,13 @@ module(..., package.seeall)
 -- calib 校准标志
 local sn, imei, calib, ver, muid
 local setSnCbFnc,setImeiCbFnc,setClkCbFnc
+local gateway_id = nil
+local run_mode = nil
+local product_name = nil
 
 imei = string.gsub(io.readFile("imei.txt"),"\r\n","") or "866714041473678"
+muid = '20200422183727A062022A7025853337'
+
 local function timeReport()
     sys.publish("TIME_CLK_IND")
     sys.timerStart(setTimeReport,2000)
@@ -152,3 +157,26 @@ function closePwm(id)
     log.debug("misc","close pwm" ,id)
 end
 
+function getGatewayID()
+    return gateway_id
+end
+
+function setGatewayID(id)
+    gateway_id = id
+end
+
+function getRunMode()
+    return run_mode
+end
+
+function setRunMode(mode)
+    run_mode = mode
+end
+
+function getProductName()
+    return product_name
+end
+
+function setProductName(name)
+    product_name = name
+end
