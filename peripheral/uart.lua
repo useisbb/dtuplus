@@ -135,7 +135,7 @@ function uart.poll_uart()
             -- 直接读串口不在这里拼包,可能会丢包
             -- local err, data_read, size = port.handle:read(100, 5)
 
-            if data_read and #data_read > 1 then
+            if data_read and #data_read >= 1 then
                 msg={}
                 table.insert(port.rxbuff,data_read)
                 msg.msgid = rtos.MSG_UART_RXDATA
