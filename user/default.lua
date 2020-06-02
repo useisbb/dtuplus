@@ -471,6 +471,63 @@ cmd.rrpc = {
     end
 }
 
+local function reloadFactory()
+    if io.exists(lnxall_conf.LNXALL_factory_info) then
+        local str = io.readFile(lnxall_conf.LNXALL_factory_info)
+        local obj = json.decode(str)
+        if obj  and misc.setGatewayID and type(misc.setGatewayID)  == "function" then
+            misc.setGatewayID(obj.sn)
+        end
+        if obj  and misc.setRunMode and type(misc.setRunMode)  == "function"  then
+            misc.setRunMode(obj.run_mode)
+        end
+        if obj  and misc.setProductName and type(misc.setProductName)  == "function"  then
+            misc.setProductName(obj.product)
+        end
+    else
+        log.warn("Factory","Not factory file was read")
+    end
+end
+
+
+-- 出厂工具通过串口工具修改配置工厂配置 factory [options] <param> ...
+local function factoryCmd(cmd)
+    log.info("Factory",cmd)
+    cmd = string.gsub(string.gsub(cmd,"\r", ""),"\n", "")
+    local t = cmd:split(' ')
+    local sn,date,hwver,product = nil,nil,nil,nil
+    local change = nil
+    local obj = {}
+    table.remove(t, 1)
+    local i=1
+    while #t > 0  do
+        local options = table.remove(t, 1) i = i + 1
+        local param = nil
+        if options == 'show' then
+            if io.exists(lnxall_conf.LNXALL_factory_info) then
+                for k,v in pairs(obj) do
+                    log.info("Factory",k,"=",v)
+                end
+            else
+                log.warn("Factory","Not factory file was read")
+            end
+            break
+        elseif options == '-sn' or options == '-date' or options == '-mac' or options == '-hwver' or options == '-product' then
+            param = table.remove(t, 1) i = i + 1
+            obj[options:sub(2,-1)] = param
+            change = true
+        elseif options == 'check' then
+            sys.publish("FACTORY_CHECK_START")
+            break
+        end
+    end
+    if change and change == true then
+        obj["run_mode"] = 0
+        io.writeFile(lnxall_conf.LNXALL_factory_info,json.encode(obj))
+        reloadFactory()
+    end
+end
+
 -- 串口读指令
 local function read(uid)
     local s = table.concat(recvBuff[uid])
@@ -488,6 +545,19 @@ local function read(uid)
         if io.exists("/qqiot.dat") then os.remove("/qqiot.dat") end
         if io.exists("/bdiot.dat") then os.remove("/bdiot.dat") end
         sys.restart("Restore default parameters:", "OK")
+    end
+
+    if s:sub(1,1) == "\n" or s:sub(1,2) == "\r\n" then
+        uart.write(uid, "luat OK\n")
+        return
+    end
+
+    if s:sub(1, 7) == "factory" then
+        local status,error = pcall(factoryCmd,s)
+        if not status then
+            log.error("uart",error)
+        end
+        return
     end
     -- DTU的参数配置
     if s:sub(1, 7) == "config," or s:sub(1, 5) == "rrpc," then
@@ -650,6 +720,8 @@ function uart_INIT(i, uconf)
         pins.setup(default["dir" .. i], 0)
         uart.set_rs485_oe(i, default["dir" .. i])
     end
+    -- 为了模拟linux 系统启动消息,出厂工具上电可以检查到设备
+    uart.write(i, "luat running\n")
 end
 ------------------------------------------------ 远程任务 ----------------------------------------------------------
 -- 远程自动更新参数和更新固件任务每隔24小时检查一次
@@ -905,6 +977,8 @@ end
 
 function JJ_Msg_subscribe()
     lost_count = 0
+
+
     sys.subscribe("JJ_NET_RECV_" .. "LoginRsp",function(status)
         if status then
             login = 'login'
@@ -919,6 +993,19 @@ function JJ_Msg_subscribe()
         local config = lnxall_conf.get_uart_param()
         if config and #config > 0 then
             for i=1,#config do default.reload_uart(i,config) end
+        end
+    end)
+    sys.subscribe("JJ_NET_RECV_" .. "RunMode",function(payload)
+        local mode = json.decode(payload)
+        if mode and mode.run_mode and io.exists(lnxall_conf.LNXALL_factory_info) then
+            local str = io.readFile(lnxall_conf.LNXALL_factory_info)
+            local obj = json.decode(str)
+            if not obj.sn then
+                log.warn("runMode", "Need before do factory process")
+            else
+                obj.run_mode = mode.run_mode
+                io.writeFile(lnxall_conf.LNXALL_factory_info,json.encode(obj))
+            end
         end
     end)
     sys.subscribe("JJ_NET_RECV_" .. "Transparent",function(payload)
@@ -949,13 +1036,23 @@ function JJ_Msg_subscribe()
         end
     end)
 
+
     sys.timerLoopStart(function()
         if login and login == 'login' then
             if lost_count > 5 then login = nil log.warn('disconnect platform by heart beat timeout',status) end
             sys.publish("JJ_NET_SEND_MSG_" .. "HeartBeat")
             lost_count = lost_count + 1
         else
-            local str =  json.encode({mi = lnxall_conf.msgid(), timestamp = os.time(), arch = 'luat_for_Air720'})
+            local str =  json.encode({
+                mi = lnxall_conf.msgid(),
+                timestamp = os.time(),
+                arch = 'none',
+                soft_ver = _G.VERSION,
+                imei=misc.getImei(),
+                product=misc.getProductName(),
+                product = misc.getProductName and type(misc.getProductName)  == "function" and misc.getProductName(),
+                run_mode = misc.getRunMode and type(misc.getRunMode)  == "function" and misc.getRunMode() or 0
+                })
             if str then
                 sys.publish("JJ_NET_SEND_MSG_" .. "LoginReq", str)
             end
@@ -1075,14 +1172,34 @@ function reload_uart(i, uconf)
     end
 end
 
+reloadFactory()
 JJ_Msg_subscribe()
 
 sys.taskInit(function()
     while true do
-        if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
-        local link = "http://qa.iot.lnxall.com/iot/download/gateway-cfg/NodesCfg_1234567789.json"
-        -- log.info("======= download 1 done ====",download(link ,nil,2000))
-        sys.wait(5000)
+        if sys.waitUntil("FACTORY_CHECK_START", 30* 1000) then
+            log.info("factory", "check running....")
+            local connected = nil
+            for i = 1,2 do
+                local code, head, body = httpv2.request("GET", "baidu.com", 1000)
+                if code and tonumber(code) == 200 and body and #body > 0 then connected = true break end
+            end
+            local obj={
+                sn=misc.getGatewayID(),
+                imei=misc.getImei(),
+                product=misc.getProductName(),
+                timestamp=os.time(),
+                data={
+                    wwan={
+                        {interfaces="4g",error_code=connected and 0 or 1,error_msg=connected and "" or "unknow"}
+                    },
+                    uart={
+                        {interfaces="uart1",error_code=0,error_msg=""}
+                    }
+                }
+            }
+            sys.publish("NET_RECV_WAIT_" .. 1,1,"test_result:" .. json.encode(obj) .. "\nluat OK")
+        end
     end
 end)
 

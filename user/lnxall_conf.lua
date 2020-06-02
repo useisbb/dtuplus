@@ -20,6 +20,7 @@ LNXALL_nodes_cfg=PREFIX_PATH .. '/lnxall/nodes_cfg.json'
 LNXALL_nodes_temp=PREFIX_PATH .. '/lnxall/templates_cfg.json'
 LNXALL_remote_log_cfg=PREFIX_PATH .. '/lnxall/remote_log_cfg.json'
 LNXALL_transparent_cfg=PREFIX_PATH .. '/lnxall/transparent_cfg.json'
+LNXALL_factory_info=PREFIX_PATH .. '/lnxall/factory_info.json'
 
 local parity_map={}
 -- lnxall 0 -> luat 2
@@ -39,7 +40,7 @@ local dir_io_map={'pio23'}
 
 local cookid = 0
 
-lx_mqtt={"LNXALL",300,1800,"mqtt.lnxall.com",3883,"localuser","dywl@galaxy",1,"M/imei/#;","G/imei/LogIn",2,0,1}
+lx_mqtt={"LNXALL",300,180,"mqtt.lnxall.com",3883,"localuser","dywl@galaxy",1,"M/imei/#;","G/imei/LogIn",2,0,1}
 
 -- 如果配置目录不存在，创建目录
 if not io.exists(LUA_DIR) then
@@ -76,9 +77,9 @@ end
 -- io.writeFile(LNXALL_nodes_temp, str, 'w')
 
 
--- 测试远程日志配置
-local str = '{"log_ip":"qa.frps.lnxall.com","log_level":5,"log_port":5002,"log_proto":"tcp","mi":94240998,"timestamp":1590143903}'
-io.writeFile(LNXALL_remote_log_cfg, str, 'w')
+-- -- 测试远程日志配置
+-- local str = '{"log_ip":"qa.frps.lnxall.com","log_level":5,"log_port":5002,"log_proto":"tcp","mi":94240998,"timestamp":1590143903}'
+-- io.writeFile(LNXALL_remote_log_cfg, str, 'w')
 
 
 -- -- 测试脚本  -- LuatTools 会把没有require的文件,忽略下载导致require失败

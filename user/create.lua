@@ -30,6 +30,8 @@ local rstTim, flyTim = 600000, 300000
 
 local recvBuff={}
 
+local gwid= nil
+
 -- 保存获取的基站坐标
 function setLocation(la, ln)
     lat, lng = la, ln
@@ -333,7 +335,7 @@ end
 local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepAlive, timeout, addr, port, usr, pwd, cleansession, sub, pub, qos, retain, uid, clientID, addImei, ssl, will, cert)
     cid, keepAlive, timeout = tonumber(cid) or 1, tonumber(keepAlive) or 300, tonumber(timeout)
     cleansession, qos, retain = tonumber(cleansession) or 0, tonumber(qos) or 0, tonumber(retain) or 0
-    clientID = (clientID == "" or not clientID) and misc.getImei() or clientID
+    clientID = ((clientID == "" or not clientID) and misc.getImei() or clientID) .. "jjiot"
     if type(pub) == "string" then pub = listTopic(pub, addImei) end
     if not will or will == "" then will = nil else will = {qos = 1, retain = 0, topic = will, payload = misc.getImei()} end
     while true do
@@ -343,7 +345,7 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
         local mqttc = mqtt.client(clientID, keepAlive, conver(usr), conver(pwd), cleansession, will, "3.1.1")
         while not mqttc:connect(addr, port) do sys.wait((2 ^ idx) * 1000) if idx > 9 then  idx = 0 sys.restart("lnxall.connectError") else idx = idx + 1 end end
         -- 初始化订阅主题
-        subscribe_topic = 'M/' .. misc.getImei() .. '/#'
+        subscribe_topic = 'M/' .. gwid .. '/#'
         if mqttc:subscribe(subscribe_topic, qos) then
             log.info("subcribe topic:",subscribe_topic)
             while true do
@@ -361,25 +363,28 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
                             sys.publish("JJ_NET_RECV_" .. "Active")
                         elseif string.match(packet.topic,"Set_RS485Cfg") then
                             sys.publish("JJ_NET_RECV_" .. "Rs485",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_NodesCfg") then
                             sys.publish("JJ_NET_RECV_" .. "NodesCfg",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_NodesTemplate") then
                             sys.publish("JJ_NET_RECV_" .. "NodesTemp",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_Rglt") then
                             sys.publish("JJ_NET_RECV_" .. "DownLinkMsg",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/Rsp_Rglt',jjControlAck(packet.payload,0) or '', 0)
+                            mqttc:publish('G/' .. gwid .. '/Rsp_Rglt',jjControlAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_GWRst") then
                             sys.publish("JJ_NET_RECV_" .. "Rstart",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_LogServerCfg") then
                             sys.publish("JJ_NET_RECV_" .. "Remote_log",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_CommonSocketCfg") then
                             sys.publish("JJ_NET_RECV_" .. "Transparent",packet.payload)
-                            mqttc:publish('G/' .. misc.getImei() .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                        elseif string.match(packet.topic,"Set_RunModeCfg") then
+                            sys.publish("JJ_NET_RECV_" .. "RunMode",packet.payload)
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         end
                     end
 
@@ -911,7 +916,7 @@ function connect(pios, conf, reg, convert, passon, upprot, dwprot)
     if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
     sys.waitUntil("DTU_PARAM_READY", 120000)
     -- 自动创建透传任务并填入参数
-
+    gwid =  misc.getGatewayID and type(misc.getGatewayID)  == "function" and misc.getGatewayID() or misc.getImei()
     for k, v in pairs(conf or {}) do
         -- log.info("Task parameter information:", k, pios, reg, convert, passon, upprot, dwprot, unpack(v))
         if v[1] and (v[1]:upper() == "TCP" or v[1]:upper() == "UDP") then
@@ -1002,27 +1007,27 @@ function connect(pios, conf, reg, convert, passon, upprot, dwprot)
         elseif v[1] and v[1]:upper() == "LNXALL" then
             log.warn("----------------------- lnxall cloud is start! --------------------------------------")
             sys.subscribe("JJ_NET_SEND_MSG_" .. "HeartBeat",function(payload)
-                table.insert(recvBuff,{'G/' .. misc.getImei() .. '/Evt_HeartBeat',payload or ''})
+                table.insert(recvBuff,{'G/' .. gwid .. '/Evt_HeartBeat',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
             sys.subscribe("JJ_NET_SEND_MSG_" .. "LoginReq",function(payload)
-                table.insert(recvBuff,{'G/' .. misc.getImei() .. '/LogIn',payload or ''})
+                table.insert(recvBuff,{'G/' .. gwid .. '/LogIn',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
             sys.subscribe("JJ_NET_SEND_MSG_" .. "NodesSta",function(payload)
-                table.insert(recvBuff,{'G/' .. misc.getImei() .. '/Evt_NodesStatus',payload or ''})
+                table.insert(recvBuff,{'G/' .. gwid .. '/Evt_NodesStatus',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
             sys.subscribe("JJ_NET_SEND_MSG_" .. "RptData",function(payload)
-                table.insert(recvBuff,{'G/' .. misc.getImei() .. '/Evt_Rpt_Data',payload or ''})
+                table.insert(recvBuff,{'G/' .. gwid .. '/Evt_Rpt_Data',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
             sys.subscribe("JJ_NET_SEND_MSG_" .. "SevsData",function(payload)
-                table.insert(recvBuff,{'G/' .. misc.getImei() .. '/Rsp_ServiceData',payload or ''})
+                table.insert(recvBuff,{'G/' .. gwid .. '/Rsp_ServiceData',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
             sys.subscribe("JJ_NET_SEND_MSG_" .. "NodesStatus",function(payload)
-                table.insert(recvBuff,{'G/' .. misc.getImei() .. '/Evt_NodesStatus',payload or ''})
+                table.insert(recvBuff,{'G/' .. gwid .. '/Evt_NodesStatus',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
             sys.taskInit(LnxallTask, k, pios, reg, convert, passon, upprot, dwprot, unpack(v, 2))
