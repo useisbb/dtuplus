@@ -1182,14 +1182,17 @@ JJ_Msg_subscribe()
 sys.taskInit(function()
     while true do
         if sys.waitUntil("FACTORY_CHECK_START", 30* 1000) then
+            if not misc.getGatewayID() then log.error("Factory", "Need do factory process") end
             log.info("factory", "check running....")
             local connected = nil
-            for i = 1,2 do
-                local code, head, body = httpv2.request("GET", "baidu.com", 1000)
-                if code and tonumber(code) == 200 and body and #body > 0 then connected = true break end
+            if socket.isReady()  then
+                for i = 1,2 do
+                    local code, head, body = httpv2.request("GET", "baidu.com", 1000)
+                    if code and tonumber(code) == 200 and body and #body > 0 then connected = true break end
+                end
             end
             local obj={
-                sn=misc.getGatewayID(),
+                sn=misc.getGatewayID() or "NONE SN",
                 imei=misc.getImei(),
                 product=misc.getProductName(),
                 timestamp=os.time(),
