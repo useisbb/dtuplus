@@ -504,8 +504,10 @@ local function factoryCmd(cmd)
         local options = table.remove(t, 1) i = i + 1
         local param = nil
         if options == 'show' then
+            log.info("Factory","key     value")
             if io.exists(lnxall_conf.LNXALL_factory_info) then
-                for k,v in pairs(obj) do
+                local json_str = io.readFile(lnxall_conf.LNXALL_factory_info)
+                for k,v in pairs(json_str and json.decode(json_str)) do
                     log.info("Factory",k,"=",v)
                 end
             else
@@ -516,6 +518,7 @@ local function factoryCmd(cmd)
             param = table.remove(t, 1) i = i + 1
             obj[options:sub(2,-1)] = param
             change = true
+            log.info("Factory",options:sub(2,-1),"=",param)
         elseif options == 'check' then
             sys.publish("FACTORY_CHECK_START")
             break
@@ -523,6 +526,7 @@ local function factoryCmd(cmd)
     end
     if change and change == true then
         obj["run_mode"] = 0
+        log.info("Factory","save factory info",json.encode(obj))
         io.writeFile(lnxall_conf.LNXALL_factory_info,json.encode(obj))
         reloadFactory()
     end
