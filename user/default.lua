@@ -504,7 +504,7 @@ local function factoryCmd(cmd)
         local options = table.remove(t, 1) i = i + 1
         local param = nil
         if options == 'show' then
-            log.info("Factory","key     value")
+            log.info("Factory","|key|     |value|")
             if io.exists(lnxall_conf.LNXALL_factory_info) then
                 local json_str = io.readFile(lnxall_conf.LNXALL_factory_info)
                 for k,v in pairs(json_str and json.decode(json_str)) do
@@ -528,6 +528,15 @@ local function factoryCmd(cmd)
         obj["run_mode"] = 0
         log.info("Factory","save factory info",json.encode(obj))
         io.writeFile(lnxall_conf.LNXALL_factory_info,json.encode(obj))
+        if io.exists(lnxall_conf.LNXALL_factory_info) then
+            local json_str = io.readFile(lnxall_conf.LNXALL_factory_info)
+            uart.write(uid,string.format("|key|\t|value|\n"))
+            for k,v in pairs(json_str and json.decode(json_str)) do
+                uart.write(uid, string.format("|%s|\t|%s|\n",k,v))
+            end
+        else
+            uart.write(uid, "Write SN Failed\n")
+        end
         reloadFactory()
     end
 end
