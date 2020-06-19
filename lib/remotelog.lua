@@ -188,7 +188,7 @@ function clientTask()
         while true do
             if not remote_addr or remote_addr == "" then break end
             if protocol~="http" and protocol~="udp" and protocol~="tcp" then
-                log.error("remote.log","remote log request invalid protocol",protocol)
+                print("remote.log","remote log request invalid protocol",protocol)
                 break
             end
             local msg = log.get_remote_log()
@@ -198,7 +198,7 @@ function clientTask()
             else
                 local host,port = remote_addr:match("://(.+):(%d+)$")
                 if not host then
-                    log.error("remote.log","request invalid host port")
+                    print("remote.log","request invalid host port")
                 else
                     local sck = protocol=="udp" and udp() or tcp()
                     if sck:connect(host,port) then
