@@ -20,6 +20,7 @@ require "httpv2"
 require "common"
 require "create"
 require "tracker"
+require "netLed"
 require "lnxall_conf"
 
 module(..., package.seeall)
@@ -345,10 +346,11 @@ function write(uid, str)
         log.info("uart","uart" .. uid .. ".write data length:", writeIdle[uid], #str)
     end
     if writeIdle[uid] and writeBuff[uid][1] then
-        if 0 ~= uart.write(uid, writeBuff[uid][1]) then
+        local s = writeBuff[uid][1]
+        if 0 ~= uart.write(uid, s) then
             table.remove(writeBuff[uid], 1)
             writeIdle[uid] = false
-            log.debug("uart","UART_" .. uid .. " writing ...")
+            log.warn("uart","UART_" .. uid .. " writing ...",(s:toHex()))
         end
     end
 end
@@ -360,8 +362,9 @@ local function writeDone(uid)
         log.debug("uart","UART_" .. uid .. " write done!")
     else
         writeIdle[uid] = false
-        uart.write(uid, table.remove(writeBuff[uid], 1))
-        log.debug("uart","UART_" .. uid .. " writing ...")
+        local s = table.remove(writeBuff[uid], 1)
+        uart.write(uid, s)
+        log.warn("uart","UART_" .. uid .. " writing",(s:toHex()))
     end
 end
 
@@ -541,6 +544,15 @@ local function factoryCmd(cmd)
     end
 end
 
+function uart_timeout(uid,str)
+    local uid = 1
+    log.warn("maybe miss recive data with uart_" .. uid)
+    confirmIdle[uid] = true
+    local str = table.remove(confirmBuff[uid])
+    if str then sys.publish("NET_RECV_WAIT_" .. uid, uid, str) end
+
+end
+
 -- 串口读指令
 local function read(uid)
     local s = table.concat(recvBuff[uid])
@@ -548,7 +560,7 @@ local function read(uid)
     -- 串口流量统计
     flowCount[uid] = flowCount[uid] + #s
     -- log.info("UART_" .. uid .. "read length:", #s)
-    log.info("UART_" .. uid .. "read:", (s:toHex()))
+    log.warn("UART_" .. uid .. " read:", (s:toHex()))
     log.info("串口流量统计值:", flowCount[uid])
     -- 根据透传标志位判断是否解析数据
     if s:sub(1, 3) == "+++" or s:sub(1, 5):match("(.+)\r\n") == "+++" then
@@ -673,15 +685,6 @@ local function read(uid)
     end
 end
 
-function uart_timeout(uid,str)
-    local uid = 1
-    log.warn("maybe miss recive data with uart_" .. uid)
-    confirmIdle[uid] = true
-    local str = table.remove(confirmBuff[uid])
-    if str then sys.publish("NET_RECV_WAIT_" .. uid, uid, str) end
-
-end
-
 -- uart 的初始化配置函数
 function uart_INIT(i, uconf)
     local id = (is8910 and i == 2) and 3 or i
@@ -690,7 +693,7 @@ function uart_INIT(i, uconf)
     uart.on(i, "sent", writeDone)
     uart.on(i, "receive", function(uid, length)
         table.insert(recvBuff[uid], uart.read(uid, length or 8192))
-        sys.timerStart(sys.publish, tonumber(dtu.uartReadTime) or 500, "UART_RECV_WAIT_" .. uid, uid)
+        sys.timerStart(sys.publish, 800, "UART_RECV_WAIT_" .. uid, uid)
     end)
     -- 处理串口接收到的数据
     sys.subscribe("UART_RECV_WAIT_" .. i, read)
@@ -990,8 +993,14 @@ end
 
 function JJ_Msg_subscribe()
     lost_count = 0
-
-
+    run_led_status = 0
+    sys.timerLoopStart(function()
+        pins.setup(pio.P0_27, run_led_status)
+        if run_led_status == 0 then run_led_status  = 1
+        else run_led_status  = 0 end
+    end,500)
+    netLed.setup(true, pio.P0_28, pio.P2_1)
+    -- ********************** 异步消息下行配置 ********************************
     sys.subscribe("JJ_NET_RECV_" .. "LoginRsp",function(status)
         if status then
             login = 'login'
@@ -1049,7 +1058,20 @@ function JJ_Msg_subscribe()
         end
     end)
 
+-- ********************** 同步消息读取配置状态 ********************************
+    sys.subscribe("JJ_NET_RECV_" .. "GetVersion", function(payload)
+        local msg = json.decode(payload)
+        local str =  json.encode({
+            mi = msg.mi,
+            timestamp = os.time(),
+            soft_ver = _G.VERSION
+            })
+        if str then
+            sys.publish("JJ_NET_SEND_MSG_" .. "RespVersion", str)
+        end
+    end)
 
+-- ********************** 设备主动发起消息 ********************************
     sys.timerLoopStart(function()
         if login and login == 'login' then
             if lost_count > 5 then login = nil log.warn('disconnect platform by heart beat timeout',status) end
@@ -1073,6 +1095,7 @@ function JJ_Msg_subscribe()
     end, 60 * 1000)
 end
 
+-- ********************** 异步消息下行配置(需要独立协程处理,含有辅助业务逻辑) ********************************
 sys.taskInit(function()
     while true do
         local result, data  = nil,nil

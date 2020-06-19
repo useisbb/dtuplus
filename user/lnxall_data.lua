@@ -60,7 +60,7 @@ function inxallStart()
             return
         end
         log.info("lnxall_data.downlink","device sn:" .. input.sn .. " addr:" .. input.term_addr .. " cloud->uart")
-        input.time=os.time()
+        input.time=rtos.tick()
 
         -- 记录下行命令
         ident_table[uid] = input
@@ -117,7 +117,9 @@ function inxallStart()
         local valid = false
         if v.sn and v.identifier  and v.mi then
             local timeout = lnxall_conf.commonTimeBysn(v.sn)
-            if timeout and timeout == 0 or v.time and os.time() <= v.time + timeout then  valid = true
+            if timeout or timeout == 0 then timeout = 2000 end --取消 timeout == 0 标识长期有效
+            -- 一个tick 5ms
+            if timeout and v.time and rtos.tick() <= v.time + (timeout/5) then  valid = true
             end
         end
         input.raw_data=string.toHex(rawdata)
@@ -162,9 +164,19 @@ function inxallStart()
         else
             log.error("lnxall_data.uplink",'decode funtion of protocol script was nil')
         end
+        sys.publish("JJ_NET_RECV_" .. "DownLinkMsgResp")
     end)
 end
 
+sys.taskInit(function ()
+    while true do
+        sys.waitUntil("JJ_NET_RECV_" .. "DownLinkMsgResp", 2000)  --如果等到发送消息的应答,或者超时才继续下一条轮询
+        local payload = lnxall_conf.period_service_poll()
+        if payload then
+            sys.publish("JJ_NET_RECV_" .. "DownLinkMsg",payload)
+        end
+    end
+end)
 
 local function testLoop(id)
     while true do

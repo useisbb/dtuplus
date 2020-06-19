@@ -385,6 +385,8 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
                         elseif string.match(packet.topic,"Set_RunModeCfg") then
                             sys.publish("JJ_NET_RECV_" .. "RunMode",packet.payload)
                             mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                        elseif string.match(packet.topic,"Get_Version_All") then
+                            sys.publish("JJ_NET_RECV_" .. "GetVersion",packet.payload)
                         end
                     end
 
@@ -1014,8 +1016,8 @@ function connect(pios, conf, reg, convert, passon, upprot, dwprot)
                 table.insert(recvBuff,{'G/' .. gwid .. '/LogIn',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
-            sys.subscribe("JJ_NET_SEND_MSG_" .. "NodesSta",function(payload)
-                table.insert(recvBuff,{'G/' .. gwid .. '/Evt_NodesStatus',payload or ''})
+            sys.subscribe("JJ_NET_SEND_MSG_" .. "RespVersion",function(payload)
+                table.insert(recvBuff,{'G/' .. gwid .. '/Rsp_Version_All',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
             sys.subscribe("JJ_NET_SEND_MSG_" .. "RptData",function(payload)

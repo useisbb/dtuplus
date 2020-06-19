@@ -231,7 +231,7 @@ local function bind_module_func(modules)
                 if node and temp and temp.parser_url and string.find(temp.parser_url,\"%s\") then\
                     node.protocol_decode = %s.protocol_decode\
                     node.protocol_encode = %s.protocol_encode\
-                    return \
+                    break \
                 end\
             end\
         end\n'
@@ -266,6 +266,7 @@ local function parser_period_service()
                                     mi = 0,
                                     intv_sample = service_cfg.report_period,  -- 直接使用上报周期做采样
                                     -- intv_sample = service_cfg.server_period
+                                    last_sample = os.time()
                             }
                             table.insert(period_list,period)
                             -- table.insert(report_list,period)
@@ -275,21 +276,22 @@ local function parser_period_service()
             end
         end
     end
+end
 
+function period_service_poll()
     for k,v in ipairs(period_list)do
         if v then
-            log.info("lnxall_config.period_service",v.sn,v.identifier,v.intv_sample)
-            sys.timerLoopStart(function()
+            if os.difftime(os.time(),v.last_sample) >= v.intv_sample then
+                v.last_sample = os.time()
+                log.info("lnxall_config.period_service",v.sn,v.identifier,v.intv_sample)
                 local obj = {}
                 obj.identifier =  v.identifier
                 obj.sn = v.sn
                 obj.timestamp = os.time()
                 obj.mi=0
                 local payload = json.encode(obj)
-                if payload then
-                    sys.publish("JJ_NET_RECV_" .. "DownLinkMsg",payload)
-                end
-            end, v.intv_sample * 1000)
+                return payload
+            end
         end
     end
 end

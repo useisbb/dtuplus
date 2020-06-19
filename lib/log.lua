@@ -66,6 +66,8 @@ local function _log(level, tag, ...)
         for _,i in pairs({...})  do     --此处的｛...｝表示可变参数构成的数组
             if type(i) == "userdata" then
                 str = str .. "xxxx "
+	    elseif type(i) == "table" then
+                str = str .. "table[] "
             elseif type(i) == "boolean" then
                 str = str .. (i and "true " or "false ")
             else
