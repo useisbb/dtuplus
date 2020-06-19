@@ -21,6 +21,7 @@ require "common"
 require "create"
 require "tracker"
 require "netLed"
+require "remotelog"
 require "lnxall_conf"
 
 module(..., package.seeall)
@@ -475,6 +476,7 @@ cmd.rrpc = {
 }
 
 local function reloadFactory()
+    remotelog.request()
     if io.exists(lnxall_conf.LNXALL_factory_info) then
         local str = io.readFile(lnxall_conf.LNXALL_factory_info)
         local obj = json.decode(str)
@@ -935,52 +937,6 @@ if lnxall_conf.lx_mqtt then
     end
     table.insert(dtu.conf,lnxall_conf.lx_mqtt )
 end
-
--- 判断一下兼容lib库,如果没有新库不会报错
-if log.remote_cfg and type(log.remote_cfg) == "function" then
-    log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
-end
-
--- ---------------------------------------------------------- 远程日志线程 ----------------------------------------------------------
-sys.taskInit(function()
-    if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
-
-    while true do
-        local remote_addr = nil
-        if log.get_remote_addr and type(log.get_remote_addr) == "function" then
-            remote_addr = log.get_remote_addr()
-        end
-        local protocol = remote_addr:match("(%a+)://")
-        sys.wait(1000)
-        while true do
-            if not remote_addr or remote_addr == "" then break end
-            if protocol~="http" and protocol~="udp" and protocol~="tcp" then
-                log.error("remote.log","remote log request invalid protocol",protocol)
-                break
-            end
-            local log = log.get_remote_log()
-            if log and not string.find(log,"socket") then  -- 不打印socket日志
-                if protocol=="http" then
-                    http.request("POST",remote_addr,nil,nil,log,20000,httpPostCbFnc)
-                    _,result = sys.waitUntil("ERRDUMP_HTTP_POST")
-                else
-                    local host,port = remote_addr:match("://(.+):(%d+)$")
-                    if not host then
-                        log.error("remote.log","request invalid host port")
-                    else
-                        local sck = protocol=="udp" and socket.udp() or socket.tcp()
-                        if sck:connect(host,port) then
-                            result = sck:send(log)
-                            sys.wait(300)
-                            sck:close()
-                        end
-                    end
-                end
-            end
-            sys.wait(100)
-        end
-    end
-end)
 
 -- ---------------------------------------------------------- 参数配置,任务转发，线程守护主进程----------------------------------------------------------
 sys.taskInit(create.connect, pios, dtu.conf, dtu.reg, tonumber(dtu.convert) or 0, (tonumber(dtu.passon) == 0), dtu.upprot, dtu.dwprot)

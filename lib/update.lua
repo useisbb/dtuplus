@@ -24,8 +24,8 @@ end
 
 local function processOta(stepData,totalLen,statusCode)
     if stepData and totalLen then
-        if statusCode=="200" or statusCode=="206" then            
-            if rtos.fota_process((sProcessedLen+stepData:len()>totalLen) and stepData:sub(1,totalLen-sProcessedLen) or stepData,totalLen)~=0 then 
+        if statusCode=="200" or statusCode=="206" then
+            if rtos.fota_process((sProcessedLen+stepData:len()>totalLen) and stepData:sub(1,totalLen-sProcessedLen) or stepData,totalLen)~=0 then
                 log.error("update.processOta","fail")
                 return false
             else
@@ -59,12 +59,12 @@ function clientTask()
                             .."&imei="..misc.getImei().."&device_key="..misc.getSn()
                             .."&firmware_name=".._G.PROJECT.."_"..rtos.get_version().."&version=".._G.VERSION..(sRedir and "&need_oss_url=1" or "")),
                      nil,{["Range"]="bytes="..sProcessedLen.."-"},nil,60000,httpDownloadCbFnc,processOta)
-                     
+
             local _,result,statusCode,head = sys.waitUntil("UPDATE_DOWNLOAD")
             log.info("update.waitUntil UPDATE_DOWNLOAD",result,statusCode)
             if result then
                 log.info("update.rtos.fota_end",rtos.fota_end())
-                if statusCode=="200" or statusCode=="206" then                    
+                if statusCode=="200" or statusCode=="206" then
                     if sCbFnc then
                         sCbFnc(true)
                     else
@@ -87,12 +87,12 @@ function clientTask()
                 end
             end
         end
-        
+
         sProcessedLen = 0
-        
+
         if sPeriod then
             sys.wait(sPeriod)
-            if rtos.fota_start()~=0 then 
+            if rtos.fota_start()~=0 then
                 log.error("update.request","fota_start fail")
                 fotastart = false
             else
@@ -129,7 +129,7 @@ end
 -- update.request(cbFnc,nil,4*3600*1000)
 -- update.request(cbFnc,nil,4*3600*1000,true)
 function request(cbFnc,url,period,redir)
-    if rtos.fota_start()~=0 then 
+    if rtos.fota_start()~=0 then
         log.error("update.request","fota_start fail")
         fotastart = false
         return
@@ -138,7 +138,7 @@ function request(cbFnc,url,period,redir)
     end
     sCbFnc,sUrl,sPeriod,sRedir = cbFnc or sCbFnc,url or sUrl,period or sPeriod,sRedir or redir
     log.info("update.request",sCbFnc,sUrl,sPeriod,sRedir)
-    if not sUpdating then        
+    if not sUpdating then
         sys.taskInit(clientTask)
     end
 end

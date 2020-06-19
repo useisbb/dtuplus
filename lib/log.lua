@@ -28,6 +28,7 @@ local SYSLOG_REMAP={
     LOGLEVEL_FATAL,
     LOGLEVEL_ERROR,
     LOGLEVEL_WARN,
+    LOGLEVEL_WARN,
     LOGLEVEL_INFO,
     LOGLEVEL_DEBUG,
     LOGLEVEL_TRACE}
@@ -60,13 +61,13 @@ local function _log(level, tag, ...)
         -- logstash 解析表达式
         -- (?<host>(?:\S+)?)\s(?<level>(?:\S+)?)\s(?<timestamp>(?:\S+)?)\s([<])(?<tags>([a-zA-Z0-9\s]+)?)([>])(?<message>([\S\s]+)?)
         -- 日志打印输出
-        local prefix = string.format("%s/%s %s %s <%s>",misc.getImei(),device_id or"",REMOTE_LEVEL_TAG[level],os.date("%x-%X"), type(tag)=="string" and tag or "")
+        local prefix = string.format("%s/%s %s %s <%s>",misc.getGatewayID() or misc.getImei(),device_id or"",REMOTE_LEVEL_TAG[level],os.date("%x-%X"), type(tag)=="string" and tag or "")
         if #remote_log_buff > REMOTE_BUFF_MAX then table.remove(remote_log_buff,1) end
         local str = prefix
         for _,i in pairs({...})  do     --此处的｛...｝表示可变参数构成的数组
             if type(i) == "userdata" then
                 str = str .. "xxxx "
-	    elseif type(i) == "table" then
+            elseif type(i) == "table" then
                 str = str .. "table[] "
             elseif type(i) == "boolean" then
                 str = str .. (i and "true " or "false ")
