@@ -31,7 +31,7 @@ function unix.restart(...)
 end
 
 function unix.tick()
-    return math.modf(chronos.nanotime()*1000)
+    return math.modf(chronos.nanotime()*1000/5)
 end
 
 function unix.get_fs_free_size(...)

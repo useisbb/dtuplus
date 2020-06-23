@@ -70,10 +70,12 @@ function inxallStart()
         log.info("lnxall_data.downlink",'immediate message sn:' .. input.sn or '' .. 'identifier:' .. input.identifier or '' .. 'mi:' .. input.mi)
         local str = json.encode(input)
         local func = lnxall_conf.scriptEncodeBysn(input.sn)
+        log.info("lnxall_data.downlink",input.sn,func,nil,str)
         if func then
             -- 下面的json_str 其实是bin_str
             local ret,func_ret,json_str,json_len = pcall(func,str or '',str and #str or 0)
-            if ret and ret == true and func_ret and json_str and func_ret == true or func_ret == 0 then
+            log.info("lnxall_data.downlink",ret,func_ret,json_str,json_len,type(json_str))
+            if ret and ret == true and func_ret and type(func_ret) == "number" and json_str and type(json_str) == "string" and func_ret == true or func_ret == 0 then
                 if lnxall_conf.portBysn(input.sn) == 'RS485_1' then
                     uid = 1
                 end
@@ -81,7 +83,7 @@ function inxallStart()
                 -- 不是json输出
                 local bin
                 output,ret = json.decode(json_str)
-                if not ret then
+                if not ret or type(output) ~= "table" then
                     bin = string.fromHex(json_str)
                     log.info("lnxall_data.downlink",'downlink binary message with hex string pack:',json_str)
                 else       -- base64数据
@@ -117,8 +119,9 @@ function inxallStart()
         local valid = false
         if v.sn and v.identifier  and v.mi then
             local timeout = lnxall_conf.commonTimeBysn(v.sn)
-            if timeout or timeout == 0 then timeout = 2000 end --取消 timeout == 0 标识长期有效
+            if timeout or timeout == 0 then timeout = 5000 end --取消 timeout == 0 标识长期有效
             -- 一个tick 5ms
+            log.info("lnxall_data.uplink",'================',v.time,rtos.tick() , v.time + (timeout/5))
             if timeout and v.time and rtos.tick() <= v.time + (timeout/5) then  valid = true
             end
         end
@@ -136,7 +139,8 @@ function inxallStart()
         if func then
             local str = json.encode(input)
             local ret,func_ret,json_str,json_len = pcall(func,str or '',str and #str or 0)
-            if ret and ret == true and func_ret and json_str and func_ret == true or func_ret == 0 then
+            log.info("lnxall_data.uplink",ret,func_ret,json_str,json_len,type(json_str))
+            if ret and ret == true and func_ret  and type(func_ret) == "number" and json_str and type(json_str) == "string" and func_ret == true or func_ret == 0 then
                 local tags = json.decode(json_str or '{}')
                 output.mi = v.mi or 0
                 output.timestamp = os.time()

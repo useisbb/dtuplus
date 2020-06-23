@@ -21,7 +21,6 @@ require "common"
 require "create"
 require "tracker"
 require "netLed"
-require "remotelog"
 require "lnxall_conf"
 
 module(..., package.seeall)
@@ -351,7 +350,7 @@ function write(uid, str)
         if 0 ~= uart.write(uid, s) then
             table.remove(writeBuff[uid], 1)
             writeIdle[uid] = false
-            log.warn("uart","UART_" .. uid .. " writing ...",(s:toHex()))
+            log.info("uart","UART_" .. uid .. " writing ...",(s:toHex()))
         end
     end
 end
@@ -365,7 +364,7 @@ local function writeDone(uid)
         writeIdle[uid] = false
         local s = table.remove(writeBuff[uid], 1)
         uart.write(uid, s)
-        log.warn("uart","UART_" .. uid .. " writing",(s:toHex()))
+        log.info("uart","UART_" .. uid .. " writing",(s:toHex()))
     end
 end
 
@@ -476,7 +475,6 @@ cmd.rrpc = {
 }
 
 local function reloadFactory()
-    remotelog.request()
     if io.exists(lnxall_conf.LNXALL_factory_info) then
         local str = io.readFile(lnxall_conf.LNXALL_factory_info)
         local obj = json.decode(str)
@@ -548,7 +546,7 @@ end
 
 function uart_timeout(uid,str)
     local uid = 1
-    log.warn("maybe miss recive data with uart_" .. uid)
+    log.info("maybe miss recive data with uart_" .. uid)
     confirmIdle[uid] = true
     local str = table.remove(confirmBuff[uid])
     if str then sys.publish("NET_RECV_WAIT_" .. uid, uid, str) end
@@ -562,7 +560,7 @@ local function read(uid)
     -- 串口流量统计
     flowCount[uid] = flowCount[uid] + #s
     -- log.info("UART_" .. uid .. "read length:", #s)
-    log.warn("UART_" .. uid .. " read:", (s:toHex()))
+    log.info("UART_" .. uid .. " read:", (s:toHex()))
     log.info("串口流量统计值:", flowCount[uid])
     -- 根据透传标志位判断是否解析数据
     if s:sub(1, 3) == "+++" or s:sub(1, 5):match("(.+)\r\n") == "+++" then
@@ -798,11 +796,11 @@ sys.taskInit(function()
     end
 end)
 
--- sys.timerLoopStart(function()
---     log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
---     log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
---     socket.printStatus()
--- end, 10000)
+sys.timerLoopStart(function()
+    log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
+    log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
+    socket.printStatus()
+end, 10000)
 
 local callFlag = false
 sys.subscribe("CALL_INCOMING", function(num)
@@ -937,6 +935,52 @@ if lnxall_conf.lx_mqtt then
     end
     table.insert(dtu.conf,lnxall_conf.lx_mqtt )
 end
+
+-- 判断一下兼容lib库,如果没有新库不会报错
+if log.remote_cfg and type(log.remote_cfg) == "function" then
+    log.remote_cfg(lnxall_conf.remote_log_param())-- reload log config
+end
+
+-- ---------------------------------------------------------- 远程日志线程 ----------------------------------------------------------
+sys.taskInit(function()
+    if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
+
+    while true do
+        local remote_addr = nil
+        if log.get_remote_addr and type(log.get_remote_addr) == "function" then
+            remote_addr = log.get_remote_addr()
+        end
+        local timeout = 5 * 60 * 1000
+        local protocol = remote_addr:match("(%a+)://")
+        sys.wait(10*60*1000)
+        while true do
+            if not remote_addr or remote_addr == "" then break end
+            if protocol~="http" and protocol~="udp" and protocol~="tcp" then
+                log.error("remote.log","remote log request invalid protocol",protocol)
+                break
+            end
+            local log = log.get_remote_log()
+
+            if protocol=="http" then
+                http.request("POST",remote_addr,nil,nil,log,20000,httpPostCbFnc)
+                _,result = sys.waitUntil("ERRDUMP_HTTP_POST")
+            else
+                local host,port = remote_addr:match("://(.+):(%d+)$")
+                if not host then
+                    log.error("remote.log","request invalid host port")
+                else
+                    local sck = protocol=="udp" and socket.udp() or socket.tcp()
+                    if sck:connect(host,port,timeout) then
+                        result = sck:send(log)
+                        sys.wait(300)
+                        sck:close()
+                    end
+                end
+            end
+            sys.wait(100)
+        end
+    end
+end)
 
 -- ---------------------------------------------------------- 参数配置,任务转发，线程守护主进程----------------------------------------------------------
 sys.taskInit(create.connect, pios, dtu.conf, dtu.reg, tonumber(dtu.convert) or 0, (tonumber(dtu.passon) == 0), dtu.upprot, dtu.dwprot)
@@ -1097,12 +1141,14 @@ sys.taskInit(function()
                                 if not ret or ret == false then
                                     log.warn("node.template","download link:" .. temp.parser_url .. ' failed')
                                 else
-                                    local suffix = "\
-                                    modules={}\
-                                    function modules.protocol_decode(...)  return protocol_decode(...) end\
-                                    function modules.protocol_encode(...)  return protocol_encode(...) end\
-                                    return modules\n"
-                                    lua_str = lua_str .. suffix
+                                    if not string.match(lua_str, "local function protocol_") then
+                                        --如果是编解码函数没有local要添加module,替换原来全局函数名
+                                        lua_str = string.gsub(lua_str, "function protocol_", "local function protocol_",2)
+                                        --加上后缀,不要去对齐
+                                        local suffix = "mod={} \nfunction mod.protocol_decode(...)  return protocol_decode(...) end \nfunction mod.protocol_encode(...)  return protocol_encode(...) end \nreturn mod\n"
+                                        lua_str = lua_str .. suffix
+                                    end
+
                                     local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH or "","lua",file)
                                     log.info("node.template",'nodes templates script file: ',lua_path,#lua_str)
                                     io.writeFile(lua_path, lua_str)

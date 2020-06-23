@@ -217,7 +217,6 @@ local function require_modules(modules)
 end
 
 local function bind_module_func(modules)
-
     for k,v in ipairs(modules)do
         -- 通过脚本名称找模板id->用模板id找设备模板->对设备模板赋值
         local bind = string.format('\
@@ -226,13 +225,17 @@ local function bind_module_func(modules)
         if not _G.nodes_cfg or not _G.nodes_temp then \
         print(\"nodes config or template was invalid \",cjson.encode(_G.nodes_cfg),cjson.encode(_G.nodes_temp))\
         end\
+        local decode,encode,template_id = nil,nil,nil\
+        decode = %s.protocol_decode\
+        encode = %s.protocol_encode\
+        for _,temp in ipairs(_G.nodes_temp) do\
+            if temp and temp.parser_url and string.find(temp.parser_url,\"%s\") then template_id = temp.template_id break end\
+        end\
+        print(\"template_id:\",template_id,\"function point:\",encode, decode)\
         for _,node in ipairs(_G.nodes_cfg) do\
-            for _,temp in ipairs(_G.nodes_temp) do\
-                if node and temp and temp.parser_url and string.find(temp.parser_url,\"%s\") then\
-                    node.protocol_decode = %s.protocol_decode\
-                    node.protocol_encode = %s.protocol_encode\
-                    break \
-                end\
+            if node and node.template_id and template_id and template_id == node.template_id then\
+                node.protocol_decode = decode\
+                node.protocol_encode = encode\
             end\
         end\n'
         ,v,v,v,v,v)
@@ -248,7 +251,7 @@ local function bind_module_func(modules)
 
     for k,v in ipairs(nodes_cfg)do
         if v then
-            log.info("lnxall_config.bind.module",v['sn'],v['protocol_encode'],v['protocol_decode'])
+            log.info("lnxall_conf.bind.module",v['sn'],v['template_id'],v['protocol_encode'],v['protocol_decode'])
         end
     end
 end
@@ -370,7 +373,7 @@ function transparent_param()
             end
             return configs
         else
-            log.error("lnxall_config.transparent",'transparent config file error, ',err)
+            log.warn("lnxall_config.transparent",'transparent config file error, ',err)
         end
     end
     return nil
