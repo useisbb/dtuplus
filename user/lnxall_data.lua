@@ -39,7 +39,7 @@ if io.exists(lnxall_conf.LNXALL_nodes_temp) then
 end
 
 local function service_resopnse(json)
-    log.info("lnxall_data.date report",'report data to lnxall platform')
+    log.info("lnxall_data report",'report data to lnxall platform')
     sys.publish("JJ_NET_SEND_MSG_" .. "SevsData",json or '')
 end
 
@@ -70,7 +70,6 @@ function inxallStart()
         log.info("lnxall_data.downlink",'immediate message sn:' .. input.sn or '' .. 'identifier:' .. input.identifier or '' .. 'mi:' .. input.mi)
         local str = json.encode(input)
         local func = lnxall_conf.scriptEncodeBysn(input.sn)
-        log.info("lnxall_data.downlink",input.sn,func,nil,str)
         if func then
             -- 下面的json_str 其实是bin_str
             local ret,func_ret,json_str,json_len = pcall(func,str or '',str and #str or 0)
@@ -121,7 +120,6 @@ function inxallStart()
             local timeout = lnxall_conf.commonTimeBysn(v.sn)
             if timeout or timeout == 0 then timeout = 5000 end --取消 timeout == 0 标识长期有效
             -- 一个tick 5ms
-            log.info("lnxall_data.uplink",'================',v.time,rtos.tick() , v.time + (timeout/5))
             if timeout and v.time and rtos.tick() <= v.time + (timeout/5) then  valid = true
             end
         end

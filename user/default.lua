@@ -572,7 +572,8 @@ local function read(uid)
         sys.restart("Restore default parameters:", "OK")
     end
 
-    if s:sub(1,1) == "\n" or s:sub(1,2) == "\r\n" then
+    --如果只接收到换行字符回应换行字符
+    if #s <= 2 and s:sub(1,1) == "\n" or s:sub(1,2) == "\r\n" then
         uart.write(uid, "luat OK\n")
         return
     end

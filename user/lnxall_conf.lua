@@ -175,7 +175,7 @@ end
 function addr2sn(term_addr)
     if term_addr then
         for k,v in ipairs(nodes_cfg)do
-            if v and v['term_addr'] == term_addr then
+            if v and v['term_addr'] and tonumber(v['term_addr'],16) == tonumber(term_addr,16) then  -- 兼容不同脚本输出的大小写或者补0
                 return v['sn']
             end
         end
