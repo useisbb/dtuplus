@@ -387,6 +387,8 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
                             mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Get_Version_All") then
                             sys.publish("JJ_NET_RECV_" .. "GetVersion",packet.payload)
+                        else
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         end
                     end
 
