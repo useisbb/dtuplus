@@ -960,21 +960,24 @@ sys.taskInit(function()
                 log.error("remote.log","remote log request invalid protocol",protocol)
                 break
             end
-            local log = log.get_remote_log()
-
-            if protocol=="http" then
-                http.request("POST",remote_addr,nil,nil,log,20000,httpPostCbFnc)
-                _,result = sys.waitUntil("ERRDUMP_HTTP_POST")
-            else
-                local host,port = remote_addr:match("://(.+):(%d+)$")
-                if not host then
-                    log.error("remote.log","request invalid host port")
+            local logs = log.get_remote_log()
+            if logs and #logs > 0 then
+                if protocol=="http" then
+                    http.request("POST",remote_addr,nil,nil,logs,20000,httpPostCbFnc)
+                    _,result = sys.waitUntil("ERRDUMP_HTTP_POST")
                 else
-                    local sck = protocol=="udp" and socket.udp() or socket.tcp()
-                    if sck:connect(host,port,timeout) then
-                        result = sck:send(log)
-                        sys.wait(300)
-                        sck:close()
+                    local host,port = remote_addr:match("://(.+):(%d+)$")
+                    if not host then
+                        log.error("remote.log","request invalid host port")
+                    else
+                        local sck = protocol=="udp" and socket.udp() or socket.tcp()
+                        if sck:connect(host,port,timeout) then
+                            result = sck:send(logs)
+                            sys.wait(300)
+                            sck:close()
+                        else --连不上返回重连
+                            break
+                        end
                     end
                 end
             end
