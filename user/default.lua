@@ -337,6 +337,11 @@ sys.timerLoopStart(function()
 end, 1000)
 
 -- 串口写数据处理
+function statusLogin()
+    return login == 'login'
+end
+
+-- 串口写数据处理
 function write(uid, str)
     if not str or str == "" then return end
     if str ~= true then
@@ -998,12 +1003,18 @@ end
 function JJ_Msg_subscribe()
     lost_count = 0
     run_led_status = 0
+    run_led_pin = pio.P0_27
+    net_led_pin = pio.P0_28
+    if not is4gLod then
+		run_led_pin = pio.P0_5
+    	net_led_pin = pio.P0_1
+	end
     sys.timerLoopStart(function()
-        pins.setup(pio.P0_27, run_led_status)
+        pins.setup(run_led_pin, run_led_status)
         if run_led_status == 0 then run_led_status  = 1
         else run_led_status  = 0 end
     end,500)
-    netLed.setup(true, pio.P0_28, pio.P2_1)
+    netLed.setup(true, net_led_pin, 0)
     -- ********************** 异步消息下行配置 ********************************
     sys.subscribe("JJ_NET_RECV_" .. "LoginRsp",function(status)
         if status then
@@ -1090,7 +1101,8 @@ function JJ_Msg_subscribe()
                 imei=misc.getImei(),
                 product=misc.getProductName(),
                 product = misc.getProductName and type(misc.getProductName)  == "function" and misc.getProductName(),
-                run_mode = misc.getRunMode and type(misc.getRunMode)  == "function" and misc.getRunMode() or 0
+                run_mode = misc.getRunMode and type(misc.getRunMode)  == "function" and misc.getRunMode() or 0,
+                gwid =  misc.getGatewayID and type(misc.getGatewayID)  == "function" and misc.getGatewayID() or misc.getImei()
                 })
             if str then
                 sys.publish("JJ_NET_SEND_MSG_" .. "LoginReq", str)

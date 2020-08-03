@@ -1034,6 +1034,10 @@ function connect(pios, conf, reg, convert, passon, upprot, dwprot)
                 table.insert(recvBuff,{'G/' .. gwid .. '/Evt_NodesStatus',payload or ''})
                 sys.publish("NET_SENT_RDY_" .. "JJIOT")
             end)
+            sys.subscribe("JJ_NET_SEND_MSG_" .. "NetworkInfo",function(payload)
+                table.insert(recvBuff,{'G/' .. gwid .. '/Evt_NetworkInfo',payload or ''})
+                sys.publish("NET_SENT_RDY_" .. "JJIOT")
+            end)
             sys.taskInit(LnxallTask, k, pios, reg, convert, passon, upprot, dwprot, unpack(v, 2))
         end
     end
