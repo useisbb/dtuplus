@@ -313,6 +313,14 @@ end
 -- 配置串口
 if dtu.pwrmod ~= "energy" then pm.wake("mcuUart.lua") end
 
+if not is4gLod then -- RDA8910 方案 CAT1
+    run_led_pin = pio.P0_5
+    net_led_pin = pio.P0_1
+else
+    run_led_pin = pio.P0_27
+    net_led_pin = pio.P0_28
+end
+
 -- 每隔1分钟重置串口计数
 sys.timerLoopStart(function()
     flow = tonumber(dtu.flow)
@@ -499,7 +507,7 @@ end
 
 
 -- 出厂工具通过串口工具修改配置工厂配置 factory [options] <param> ...
-local function factoryCmd(cmd)
+local function factoryCmd(cmd,uid)
     log.info("Factory",cmd)
     cmd = string.gsub(string.gsub(cmd,"\r", ""),"\n", "")
     local t = cmd:split(' ')
@@ -584,7 +592,7 @@ local function read(uid)
     end
 
     if s:sub(1, 7) == "factory" then
-        local status,error = pcall(factoryCmd,s)
+        local status,error = pcall(factoryCmd,s,uid)
         if not status then
             log.error("uart",error)
         end
@@ -1003,18 +1011,12 @@ end
 function JJ_Msg_subscribe()
     lost_count = 0
     run_led_status = 0
-    run_led_pin = pio.P0_27
-    net_led_pin = pio.P0_28
-    if not is4gLod then
-		run_led_pin = pio.P0_5
-    	net_led_pin = pio.P0_1
-	end
     sys.timerLoopStart(function()
         pins.setup(run_led_pin, run_led_status)
         if run_led_status == 0 then run_led_status  = 1
         else run_led_status  = 0 end
     end,500)
-    netLed.setup(true, net_led_pin, 0)
+    netLed.setup(true, net_led_pin)
     -- ********************** 异步消息下行配置 ********************************
     sys.subscribe("JJ_NET_RECV_" .. "LoginRsp",function(status)
         if status then

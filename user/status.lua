@@ -60,6 +60,7 @@ sys.timerLoopStart(function()
     if default.statusLogin() then
         for sn,status in pairs(nodes_status) do
             local offtime = lnxall_conf.offlineTimeBysn(sn)
+            status.login_time = 0
             if status.last_rcv and offtime and os.time() < (status.last_rcv + offtime) then
                 status.online = true
             else
@@ -101,10 +102,10 @@ sys.timerLoopStart(function()
             local report = {}
             report.wwan={
                 l3_device="2/3/4g-wwan",
-                proto=net.getNetMode(),
-                IMSI=sim.getImsi(),
-                IMEI=misc.getImei(),
-                SIG=net.getRssi()
+                proto=net and net.getNetMode() or "",
+                IMSI=sim and sim.getImsi() or "",
+                IMEI=misc and misc.getImei() or "",
+                SIG=net and net.getRssi() or ""
             }
             local str =  json.encode(report)
             if str then

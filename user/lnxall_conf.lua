@@ -354,8 +354,8 @@ function transparent_param()
                 if socket and socket.protocol_type and socket.socket_addr and socket.socket_port then
                     tmp={
                         socket.protocol_type,
-                        string.format("0x%s",socket.heartbeat_packet),
-                        socket.heartbeat_interval,
+                        string.format("0x%s",socket.heartbeat_packet or "00"),
+                        socket.heartbeat_interval or 0,
                         socket.socket_addr,
                         string.format("%d",socket.socket_port),
                         tonumber(string.sub(socket.binding_port,7)),
@@ -363,7 +363,7 @@ function transparent_param()
                         "",
                         "",
                         "",
-                        string.format("0x%s",socket.login_packet),
+                        socket.login_packet and string.format("0x%s",socket.login_packet) or "",
                         socket.frame_header,
                         socket.frame_tail
 
