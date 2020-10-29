@@ -3,6 +3,7 @@ local chronos = require("chronos")
 local fs = require("fs")
 local math = require("math")
 local scheduler = Scheduler()
+local ls  = require "lsocket"
 pmd = require "pmd"
 unix={}
 
@@ -71,6 +72,7 @@ function unix.receive(msg_id)
                     return msg,msg.uid
                 end
             end
+            ls.select({},{},0.1)
         end
     end
     return nil
