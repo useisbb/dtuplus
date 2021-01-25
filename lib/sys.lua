@@ -32,8 +32,10 @@ local taskTimerPool = {}
 local para = {}
 --定时器是否循环表
 local loop = {}
-
-sys.poll_uart=uart.poll_uart
+-- 监控 task
+local monitor = {}
+-- 最近调度时间
+local schedules = {}
 
 -- 启动GSM协议栈。例如在充电开机未启动GSM协议栈状态下，如果用户长按键正常开机，此时调用此接口启动GSM协议栈即可
 -- @return 无
@@ -46,36 +48,69 @@ end
 -- @string r 重启原因，用户自定义，一般是string类型，重启后的trace中会打印出此重启原因
 -- @return 无
 -- @usage sys.restart('程序超时软件重启')
-function restart(r)
+function restart(r,param)
     assert(r and r ~= "", "sys.restart cause null")
-    if errDump and errDump.appendErr and type(errDump.appendErr) == "function" then errDump.appendErr("restart[" .. r .. "];") end
-    log.warn("sys.restart", r)
-    rtos.restart()
+    if errDump and errDump.appendErr and type(errDump.appendErr) == "function" then errDump.appendErr("restart[" .. r .. "];") if param and type(param) == "string" then errDump.appendErr("param[" .. param .. "];") end end
+    log.error("system", r, debug.traceback())
+    sys.timerStart(rtos.restart, 3000) --延迟重启
+    -- rtos.restart()
 end
 
---- Task任务延时函数，只能用于任务函数中
+function softWdtAdd(timeout,info)
+    monitor[coroutine.running()] = {timeout,info}
+    if not schedules[coroutine.running()] then schedules[coroutine.running()] = {} end
+    schedules[coroutine.running()]["entry"] = os.time()
+end
+
+function printTaskDebug()
+    for id, schedule in pairs(schedules) do
+        if not schedule then return end
+        log.error("system", string.format("Task:%s Entry:%s Run:%d(mS) UsedRate %d%%" ,schedule["info"],os.date("%Y-%m-%d %H:%M:%S",schedule["entry"]),schedule["run"] or -1,schedule["usedrate"] or 0))
+    end
+end
+
+-- Task任务延时函数，只能用于任务函数中
 -- @number ms  整数，最大等待126322567毫秒
 -- @return 定时结束返回nil,被其他线程唤起返回调用线程传入的参数
 -- @usage sys.wait(30)
 function wait(ms)
     -- 参数检测，参数不能为负值
     assert(ms > 0, "The wait time cannot be negative!")
+    local co = coroutine.running()
+    if not schedules[co]["info"] then  --如果没有就赋值
+        log.error("system", "task infomation is none")
+    end
+    schedules[co]["leave"] = os.time() --此时已经离开本协程
+    if schedules[co]["lasttick"] then
+        schedules[co]["run"] = (rtos.tick() - schedules[co]["lasttick"])/5 --一个tick5ms
+    end
+    schedules[co]["lasttick"] = rtos.tick()
     --4G底层不支持小于5ms的定时器
     if ms < 5 then ms = 5 end
     -- 选一个未使用的定时器ID给该任务线程
-    if taskTimerId >= TASK_TIMER_ID_MAX then taskTimerId = 0 end
-    taskTimerId = taskTimerId + 1
-    local timerid = taskTimerId
-    taskTimerPool[coroutine.running()] = timerid
-    timerPool[timerid] = coroutine.running()
+    local timerid
+    local count = 1
+    repeat
+        if taskTimerId >= (TASK_TIMER_ID_MAX - 1) then taskTimerId = 0 end
+        taskTimerId = taskTimerId + 1
+        timerid = taskTimerId
+        count = count + 1
+        assert(count < TASK_TIMER_ID_MAX, "Timer pool was empty!!")
+    until not timerPool[timerid] --如果定时器不存在就退出分配,否则循环
+    taskTimerPool[co] = timerid
+    timerPool[timerid] = co
     -- 调用core的rtos定时器
     if 1 ~= rtos.timer_start(timerid, ms) then log.debug("rtos.timer_start error") return end
     -- 挂起调用的任务线程
     local message = {coroutine.yield()}
+    rtos.timer_stop(timerid)
+    taskTimerPool[co] = nil
+    timerPool[timerid] = nil
+    schedules[co]["sleep"] = (rtos.tick() - schedules[co]["lasttick"])/5 --一个tick5ms
+    schedules[co]["lasttick"] = rtos.tick()
+    schedules[co]["entry"] = os.time() --开始执行本协程
+    schedules[co]["usedrate"] = (schedules[co]["run"] or 0)/((schedules[co]["sleep"] or 1) + (schedules[co]["run"] or 1))*100
     if #message ~= 0 then
-        rtos.timer_stop(timerid)
-        taskTimerPool[coroutine.running()] = nil
-        timerPool[timerid] = nil
         return unpack(message)
     end
 end
@@ -114,6 +149,11 @@ end
 -- @usage sys.taskInit(task1,'a','b')
 function taskInit(fun, ...)
     local co = coroutine.create(fun)
+    local info = debug.getinfo(fun)
+    local src_line  = string.format("[%s]:%d",info.short_src,info.linedefined)
+    if not schedules[co] then schedules[co] = {} end
+    log.info("task create:",co,src_line,fun)
+    schedules[co]["info"] = src_line --用文件名加行号初始化协程名称
     coroutine.resume(co, unpack(arg))
     return co
 end
@@ -141,7 +181,6 @@ function init(mode, lprfnc)
         end
     end
 end
-
 
 ------------------------------------------ rtos消息回调处理部分 ------------------------------------------
 --[[
@@ -221,14 +260,11 @@ function timerStart(fnc, ms, ...)
         timerStop(fnc, unpack(arg))
     end
     -- 为定时器申请ID，ID值 1-20 留给任务，20-30留给消息专用定时器
-    while true do
+    repeat
         if msgId >= MSG_TIMER_ID_MAX then msgId = TASK_TIMER_ID_MAX end
         msgId = msgId + 1
-        if timerPool[msgId] == nil then
-            timerPool[msgId] = fnc
-            break
-        end
-    end
+    until not timerPool[msgId]
+    timerPool[msgId] = fnc
     --调用底层接口启动定时器
     if rtos.timer_start(msgId, ms) ~= 1 then log.debug("rtos.timer_start error") return end
     --如果存在可变参数，在定时器参数表中保存参数
@@ -318,13 +354,33 @@ local function dispatch()
         if subscribers[message[1]] then
             for callback, _ in pairs(subscribers[message[1]]) do
                 if type(callback) == "function" then
-                    local status,error = pcall(callback,unpack(message, 2, #message))
-                    if not status then
-                        assert(nil,error)
-                    end
+                    callback(unpack(message, 2, #message))
                 elseif type(callback) == "thread" then
                     coroutine.resume(callback, unpack(message))
                 end
+            end
+        end
+    end
+end
+
+-- 协程状态判断
+local function softWdt()
+    local now = os.time()
+    for taskId,tags in pairs(monitor) do
+        local timeout = tags[1]
+        local info = tags[2]
+        if coroutine.status(taskId)  == "dead" then
+            log.info("system", "coroutine has dead,message:",info,"co thread:",taskId)
+            local trace = debug.traceback(taskId)
+            sys.restart("协程挂死",trace)
+            monitor[taskId] = nil   --关掉监控,要不然会造成循环调用
+        end
+        if schedules[taskId] then
+            local entry_t = schedules[taskId]["entry"]
+            if entry_t and os.difftime(now,entry_t) >= timeout then
+                local trace = debug.traceback(taskId)
+                sys.restart(string.format("协程调度失败[%s]",info or ""),trace)
+                monitor[taskId] = nil   --关掉监控,要不然会造成循环调用
             end
         end
     end
@@ -349,9 +405,9 @@ end
 -- @usage sys.run()
 function run()
     while true do
-        local status,error = true,nil
         -- 分发内部消息
         dispatch()
+        softWdt()
         -- 阻塞读取外部消息
         local msg, param = rtos.receive(rtos.INF_TIMEOUT)
         -- 判断是否为定时器消息，并且消息是否注册

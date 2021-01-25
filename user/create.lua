@@ -32,6 +32,7 @@ local recvBuff={}
 
 local gwid= nil
 
+local recvstamp={}
 -- 保存获取的基站坐标
 function setLocation(la, ln)
     lat, lng = la, ln
@@ -121,6 +122,7 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
     if tonumber(intervalTime) then sys.timerLoopStart(sys.publish, tonumber(intervalTime) * 1000, "AUTO_SAMPL_" .. uid) end
     local dwprotFnc = dwprot and dwprot[cid] and dwprot[cid] ~= "" and loadstring(dwprot[cid]:match("function(.+)end"))
     local upprotFnc = upprot and upprot[cid] and upprot[cid] ~= "" and loadstring(upprot[cid]:match("function(.+)end"))
+    sys.softWdtAdd(30*60,"socket"..cid)
     while true do
         local idx = 0
         if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
@@ -129,11 +131,14 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
         -- 登陆报文
         if login or loginMsg(reg) then c:send(conver(login) or loginMsg(reg)) end
         interval[uid], samptime[uid] = tonumber(gap) or 0, tonumber(report) or 0
+        recvstamp[cid] = os.time()
         while true do
             datalink = true
-            local result, data, param = c:recv(timeout * 1000, "NET_SENT_RDY_" .. (passon and cid or uid))
-            if result then
+            local result, data, param = c:recv(timeout * 1000, "NET_SENT_RDY_" .. uid)
+            -- local result, data, param = c:recv(timeout * 1000, "NET_SENT_RDY_" .. (passon and cid or uid))
+            if result then --收到socket消息
                 -- 这里执行用户自定义的指令
+                recvstamp[cid] = os.time()
                 if data:sub(1, 5) == "rrpc," or data:sub(1, 7) == "config," then
                     local res, msg = pcall(userapi, data, pios)
                     if not res then log.error("远程查询的API错误:", msg) end
@@ -141,7 +146,10 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
                         res, msg = pcall(upprotFnc, msg)
                         if not res then log.error("数据流模版错误:", msg) end
                     end
-                    if not c:send(msg) then break end
+                    if not c:send(msg) then
+                        log.warn("socket", "send failed,msg:",msg)
+                        break
+                    end
                 elseif convert == 1 then -- 转换HEX String
                     sys.publish("NET_RECV_WAIT_" .. uid, uid, (data:fromHex()))
                 elseif convert == 0 and dwprotFnc then -- 转换用户自定义报文
@@ -168,31 +176,41 @@ local function tcpTask(cid, pios, reg, convert, passon, upprot, dwprot, prot, pi
                             log.warn("transparent","socket data message tail cound not match!")
                         end
                     end
-                    log.debug("transparent","downlink message:",data:toHex())
-                    sys.publish("NET_RECV_WAIT_" .. uid, uid, data)
+                    -- log.debug("transparent","downlink message:",data:toHex())
+                    sys.publish("NET_RECV_WAIT_" .. uid, uid, data,cid)
                 end
-            elseif data == ("NET_SENT_RDY_" .. (passon and cid or uid)) then
+            elseif data == ("NET_SENT_RDY_" .. uid) then --收到系统消息
+            -- elseif data == ("NET_SENT_RDY_" .. (passon and cid or uid)) then --收到系统消息
                 if convert == 1 then -- 转换为Hex String 报文
-                    if not c:send((param:toHex())) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_ERROR\r\n") end break end
+                    if not c:send((param:toHex())) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_ERROR\r\n") end log.warn("socket", "send failed with convert")  break end
                 elseif convert == 0 and upprotFnc then -- 转换为用户自定义报文
                     local res, msg = pcall(upprotFnc, param)
                     if not res or not msg then
                         log.error("数据流模版错误:", msg)
                     else
-                        if not c:send(res and msg or param) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_ERROR\r\n") end break end
+                        if not c:send(res and msg or param) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_ERROR\r\n") end log.warn("socket", "send failed with upprotFnc") break end
                     end
                 else -- 默认不转换
                     if head then param = head .. param end
                     if tail then param = param .. tail end
-                    log.debug("transparent","downlink message:",data:toHex())
-                    if not c:send(param) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_ERROR\r\n") end break end
+                    log.debug("transparent","uplink message:",data:toHex())
+                    if not c:send(param,2000) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_ERROR\r\n") end log.warn("socket", "send failed with transparent") break end
                 end
                 if passon and passon == 1 then sys.publish("UART_SENT_RDY_" .. uid, uid, "SEND_OK\r\n") end
             elseif data == "timeout" then
-                if not c:send(conver(ping)) then break end
+                if not c:send(conver(ping)) then
+                    log.warn("socket", "send timeout",c:send(conver(ping)))
+                    break
+                end
+                if os.difftime(os.time(),recvstamp[cid]) > 2 * 60 * 60 then
+                    log.error("system", "socket state error,last recv time:",recvstamp[cid])
+                    break
+                end
             else
+                log.error("socket", "unknow error")
                 break
             end
+            data, param = nil,nil
         end
         c:close()
         datalink = false
@@ -331,15 +349,114 @@ local function mqttTask(cid, pios, reg, convert, passon, upprot, dwprot, keepAli
         sys.wait(1000)
     end
 end
+----------------------------------------------------------- DY MQTT --------------------------------------------------------
+function DyMqttTask(cid, pios, reg, convert, passon, upprot, dwprot, keepAlive, timeout, addr, port, usr, pwd, cleansession, sub, pub, qos, retain, uid, clientID, addImei, ssl, will, cert)
+	log.warn("----------------------- DY MQTT is start! -------------------------------------")
+	local msgID = 1
+    cid, keepAlive, timeout, uid = tonumber(cid) or 1, tonumber(keepAlive) or 300, tonumber(timeout), tonumber(uid)
+    cleansession, qos, retain = tonumber(cleansession) or 0, tonumber(qos) or 0, tonumber(retain) or 0
+    clientID = (clientID == "" or not clientID) and misc.getImei() or clientID
+    if not will or will == "" then will = nil else will = {qos = 1, retain = 0, topic = will, payload = misc.getImei()} end
+    keepAlive = 120
+    log.info("dymqtt","sub_raw,clientID", sub,clientID)
+    while true do
+        local idx = 0
+        if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
+        local mqttc = mqtt.client(clientID, keepAlive, conver(usr), conver(pwd), cleansession, will, "3.1.1")
+        log.info("dymqtt","1 mqtt:client ",mqttc)
+        while not mqttc:connect(addr, port, ssl == "tcp_ssl" and ssl or nil, cert) do sys.wait((2 ^ idx) * 1000)idx = idx > 9 and 0 or idx + 1 end
+        -- 初始化订阅主题
+        log.info("dymqtt","2 mqttc:connect usr, pwd, keepAlive, timeout",usr, pwd, keepAlive, timeout)
+		if _G.mqtt_connected == 0 then	sys.publish("UART_SENT_RDY_" .. uid, uid, "+QMTCONN: 0,0,0\r\n") end
+		_G.mqtt_connected = 1
+
+		while _G.usr_mqtt.sub_topic == nil do
+			result, data = sys.waitUntil("SUB_TOPIC_IND" .. uid, 1000)
+            log.info("dymqtt","sub_topic:", _G.usr_mqtt.sub_topic)
+	    end
+
+	    sub = _G.usr_mqtt.sub_topic
+        log.info("dymqtt","mqttc:subscribe ",sub)
+        if sub ~= nil and mqttc:subscribe(sub, qos) then
+            --if loginMsg(reg) then mqttc:publish(pub[1], loginMsg(reg), tonumber(pub[2]) or qos, retain) end
+            _G.usr_mqtt.connected = 1
+            local gw_mi = nil
+            while true do
+                datalink = true
+                log.info("dymqtt","passon or uid:",passon,uid)
+                local r, packet, param = mqttc:receive(60 * 1000, "NET_SENT_RDY_" .. (uid or passon))
+                if gw_mi then log.info("dymqtt","gw_mi:toHex():",gw_mi:toHex()) end
+                if r then
+                    log.info("dymqtt","订阅的消息:", packet and packet.topic)
+                    log.info("dymqtt","packet.payload Hex:",packet.payload:toHex())
+                    msgID = (msgID + 1) % 255
+                    local paylog_data = "+QMTRECV:1," .. msgID .." ," .. packet.topic .. "," .. packet.payload .. "\r\n"
+                    log.info("dymqtt","paylog_data:",paylog_data)
+
+                    sys.publish("UART_SENT_RDY_" .. uid, uid, paylog_data)
+                elseif packet == 'timeout' then
+                    log.info("dymqtt","4 The client timeout actively reports status information.")
+                elseif packet == ("NET_SENT_RDY_" .. (uid or passon)) then
+                	if _G.usr_mqtt.pub_topic then
+	                    local pub_topic = _G.usr_mqtt.pub_topic
+                        log.info("dymqtt","发布的主题:", pub_topic)
+	                    local paylog_data = param
+                        log.info("dymqtt","paylog_data:toHex",paylog_data:toHex())
+	                    if not mqttc:publish(pub_topic, paylog_data, tonumber(pub[2]) or qos, retain) then if passon then sys.publish("UART_SENT_RDY_" .. uid, uid, "ERROR\r\n") end break end
+
+                        log.info("dymqtt","UART_SENT_RDY_1","+QMTPUB: 0,0,0\r\n")
+	                    sys.publish("UART_SENT_RDY_" .. uid, uid, "+QMTPUB: 0,0,0\r\n")
+                    else
+                    	log.warning("pub_topic is NULL")
+                    	sys.publish("UART_SENT_RDY_" .. uid, uid, "ERROR\r\n")
+                    end
+                else
+                    log.warn('The USERMQTTServer connection is broken.')
+                    log.info("dymqtt","r, packet, param", r, packet, param)
+                    break
+                end
+            end
+        end
+
+        if sub ~= nil then
+        	datalink = false
+        	mqttc:disconnect()
+        end
+        sys.wait(1000)
+    end
+end
 ---------------------------------------------------------- Lnxall 云服务器 ----------------------------------------------------------
+function lnxall_login()
+    if not default.login or default.login ~= 'login' then
+        local obj = {
+            mi = lnxall_conf.msgid(),
+            timestamp = os.time(),
+            arch = 'none',
+            soft_ver = _G.VERSION,
+            imei=misc.getImei(),
+            product=misc.getProductName(),
+            product = misc.getProductName and type(misc.getProductName)  == "function" and misc.getProductName(),
+            run_mode = misc.getRunMode and type(misc.getRunMode)  == "function" and misc.getRunMode() or 0,
+            gwid =  misc.getGatewayID and type(misc.getGatewayID)  == "function" and misc.getGatewayID() or misc.getImei()
+        }
+        local str =  json.encode(obj)
+        obj = nil
+        if str then
+            sys.publish("JJ_NET_SEND_MSG_" .. "LoginReq", str)
+        end
+    end
+end
+
 local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepAlive, timeout, addr, port, usr, pwd, cleansession, sub, pub, qos, retain, uid, clientID, addImei, ssl, will, cert)
     cid, keepAlive, timeout = tonumber(cid) or 1, tonumber(keepAlive) or 300, tonumber(timeout)
     cleansession, qos, retain = tonumber(cleansession) or 0, tonumber(qos) or 0, tonumber(retain) or 0
     clientID = ((clientID == "" or not clientID) and misc.getImei() or clientID) .. "jjiot"
     if type(pub) == "string" then pub = listTopic(pub, addImei) end
     if not will or will == "" then will = nil else will = {qos = 1, retain = 0, topic = will, payload = misc.getImei()} end
+    sys.softWdtAdd(30*60,"jjiot"..cid)
     while true do
         local messageId, idx = false, 0
+        _G.net_connected = 0
         if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
         log.info('mqtt client:',clientID, conver(usr), conver(pwd), cleansession,addr,port)
         local mqttc = mqtt.client(clientID, keepAlive, conver(usr), conver(pwd), cleansession, will, "3.1.1")
@@ -348,12 +465,16 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
         subscribe_topic = 'M/' .. gwid .. '/#'
         if mqttc:subscribe(subscribe_topic, qos) then
             log.info("subcribe topic:",subscribe_topic)
+            recvstamp[cid] = os.time()
+            lnxall_login()
+            _G.net_connected = 1
             while true do
                 datalink = true
                 local r, packet, param = mqttc:receive((timeout or 180) * 1000, "NET_SENT_RDY_" .. "JJIOT")
                 if r then
                     log.info("received message:", packet and packet.topic,packet and packet.payload)
                     if packet then
+                        recvstamp[cid] = os.time()
                         if string.match(packet.topic,"Rsp_LogIn") then
                             if packet.payload then
                                 local obj = json.decode(packet.payload)
@@ -363,6 +484,9 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
                             sys.publish("JJ_NET_RECV_" .. "Active")
                         elseif string.match(packet.topic,"Set_RS485Cfg") then
                             sys.publish("JJ_NET_RECV_" .. "Rs485",packet.payload)
+                            mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
+                        elseif string.match(packet.topic,"Set_LoRaWANCfg") then
+                            sys.publish("JJ_NET_RECV_" .. "Lora",packet.payload)
                             mqttc:publish('G/' .. gwid .. '/CmdResult',jjGeneralAck(packet.payload,0) or '', 0)
                         elseif string.match(packet.topic,"Set_NodesCfg") then
                             sys.publish("JJ_NET_RECV_" .. "NodesCfg",packet.payload)
@@ -394,6 +518,10 @@ local function LnxallTask(cid, pios, reg, convert, passon, upprot, dwprot, keepA
 
                 elseif packet == 'timeout' then
                     log.debug('The client timeout actively reports status information.')
+                    if os.difftime(os.time(),recvstamp[cid]) > 30 * 60 then
+                        log.error("system", "socket state error,last recv time:",recvstamp[cid])
+                        break
+                    end
                 elseif packet == ("NET_SENT_RDY_" .. "JJIOT") then
                     for i = 0,#recvBuff do
                         local packet = table.remove(recvBuff)

@@ -18,6 +18,7 @@ require "socket"
 require "audio"
 require "httpv2"
 require "common"
+require "update"
 require "create"
 require "tracker"
 require "netLed"
@@ -26,6 +27,22 @@ require "lnxall_conf"
 module(..., package.seeall)
 
 -- 判断模块类型
+_G.at_mode = 0
+_G.dy_at_mode = 0
+_G.net_connected = 0
+_G.at_intermediateBuff = {}
+_G.usr_mqtt = {
+	clientId = nil,
+	addr = "183.129.159.166",
+	port = "10203",
+	usr = "dywlgsq",
+	pwd = "dywlgsq",
+	sub_topic = nil,
+	pub_len = 0,
+	created = 0,
+	connected = 0,
+}
+local dy_at = 0
 local ver = rtos.get_version():upper()
 local is4gLod = ver:find("ASR1802")
 local is1802S = ver:find("ASR1802S")
@@ -48,7 +65,7 @@ local sendBuff = {{}, {}}
 -- 基站定位坐标
 local lbs = {lat, lng}
 -- login 标记
-local login = nil
+login = nil
 -- 串口confirm缓冲区
 local confirmBuff = {{}, {}}
 -- 串口confirm空闲标记
@@ -313,10 +330,12 @@ end
 -- 配置串口
 if dtu.pwrmod ~= "energy" then pm.wake("mcuUart.lua") end
 
-if not is4gLod then -- RDA8910 方案 CAT1
-    run_led_pin = pio.P0_5
-    net_led_pin = pio.P0_1
-else
+if is8910 then
+    -- run_led_pin = pio.P0_5
+    -- net_led_pin = pio.P0_1
+    run_led_pin = pio.P0_27
+    net_led_pin = pio.P0_28
+elseif is4gLod then
     run_led_pin = pio.P0_27
     net_led_pin = pio.P0_28
 end
@@ -351,7 +370,7 @@ end
 
 -- 串口写数据处理
 function write(uid, str)
-    if not str or str == "" then return end
+    if not str or str == "" or _G.at_mode == 1 then return end
     if str ~= true then
         for i = 1, #str, SENDSIZE do
             table.insert(writeBuff[uid], str:sub(i, i + SENDSIZE - 1))
@@ -553,6 +572,9 @@ local function factoryCmd(cmd,uid)
         else
             uart.write(uid, "Write SN Failed\n")
         end
+        if obj["sn"] then
+            misc.setSn(obj["sn"])
+        end
         reloadFactory()
     end
 end
@@ -566,6 +588,258 @@ function uart_timeout(uid,str)
 
 end
 
+-- AT指令处理
+local function AtModeProcess(uid,s)
+    -- 执行AT指令
+    if s:sub(1, 2):upper() == "AT" then
+        local tmp_s = s:match("(.+)\r\n") or s
+        local intermediateBuff = table.concat(_G.at_intermediateBuff)
+        _G.at_intermediateBuff = {}
+        if tmp_s:sub(1, 8):upper() == "AT+ENTER" then
+            _G.at_mode = 1
+            uart.write(uid, "OK\r\n")
+            return 1
+        elseif tmp_s:sub(1, 7):upper() == "AT+EXIT" then
+            _G.at_mode = 0
+            uart.write(uid, "OK\r\n")
+            return 1
+        end
+        if _G.at_mode ~= 1 then
+            --uart.write(uid, "please switch to at mode\r\n")
+            return 0
+        end
+        if tmp_s:sub(1, 9):upper() == "AT+WISN=\"" then
+            local sn = string.sub(tmp_s, 10, -2)
+            if misc.setSn(sn) == nil then
+                uart.write(uid, "OK\r\n")
+            else
+                uart.write(uid, "ERROR\r\n")
+            end
+        elseif tmp_s:sub(1, 8):upper() == "AT+WISN?" then
+            local sn = misc.getGatewayID()
+            if sn ~= nil then
+                uart.write(uid, sn .. "\r\nOK\r\n")
+            else
+                uart.write(uid, "OK\r\n")
+            end
+        elseif tmp_s:sub(1, 10):upper() == "AT+CIPPING" then
+            if _G.net_connected == 1 then
+                uart.write(uid, "OK\r\n")
+            else
+                uart.write(uid, "ERROR\r\n")
+            end
+        elseif tmp_s:sub(1, 8):upper() == "AT+RESET" then
+            ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+                uart.write(uid, response .. "\r\n")
+            end, nil)
+        elseif tmp_s:sub(1, 4):upper() == "AT*I" then
+            ril.request("AT+CGMI", nil, function(cmd, success, response, intermediate) end, nil)
+            ril.request("AT+CGMM", nil, function(cmd, success, response, intermediate) end, nil)
+            ril.request("AT+CGMR", nil, function(cmd, success, response, intermediate) end, nil)
+            ril.request("AT+CGSN", nil, function(cmd, success, response, intermediate) end, nil)
+            ril.request("AT+ICCID", nil, function(cmd, success, response, intermediate)
+                intermediateBuff = table.concat(_G.at_intermediateBuff)
+                uart.write(uid, intermediateBuff)
+
+                local imsi = sim.getImsi()
+                if imsi ~= nil then
+                    uart.write(uid, "+IMSI: " .. imsi .. "\r\nOK\r\n")
+                else
+                    uart.write(uid, "+IMSI: " .. "OK\r\n")
+                end
+
+                local sn = misc.getGatewayID()
+                if sn ~= nil then
+                    uart.write(uid, "+WISN: " .. sn .. "\r\nOK\r\n")
+                else
+                    uart.write(uid, "+WISN: " .. "OK\r\n")
+                end
+                uart.write(uid, "+VERSION: " .. _G.VERSION .. "\r\n")
+                uart.write(uid, "OK\r\n")
+            end, nil)
+        elseif tmp_s:sub(1, 7):upper() == "AT+CLCK" then
+            ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+                intermediateBuff = table.concat(_G.at_intermediateBuff)
+                uart.write(uid, intermediateBuff)
+            end, nil)
+        elseif tmp_s:sub(1, 10):upper() == "AT+CGDCONT" then
+            ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+                intermediateBuff = table.concat(_G.at_intermediateBuff)
+                uart.write(uid, intermediateBuff)
+            end, nil)
+        elseif tmp_s:sub(1, 7):upper() == "AT+DIAG" then
+            ril.request("AT+CPIN?", nil, function(cmd, success, response, intermediate) end, nil)
+            ril.request("AT+CSQ", nil, function(cmd, success, response, intermediate) end, nil)
+            ril.request("AT+COPS?", nil, function(cmd, success, response, intermediate) end, nil)
+            ril.request("AT+CGREG?", nil, function(cmd, success, response, intermediate) end, nil)
+            ril.request("AT+CGDCONT?", nil, function(cmd, success, response, intermediate)
+                intermediateBuff = table.concat(_G.at_intermediateBuff)
+                uart.write(uid, intermediateBuff)
+            end, nil)
+            --ril.request("AT*GETIP=0", nil, function(cmd, success, response, intermediate)
+                --intermediateBuff = table.concat(_G.at_intermediateBuff)
+                --uart.write(uid, intermediateBuff)
+            --end, nil)
+        elseif #tmp_s > 2 then
+            ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+                intermediateBuff = table.concat(_G.at_intermediateBuff)
+                uart.write(uid, intermediateBuff)
+            end, nil)
+        end
+        return 1
+    end
+    return 0
+end
+
+-- AT指令处理
+local function DyCmdProcess(uid,s)
+    -- 执行AT指令
+    if #s and _G.usr_mqtt.pub_len and _G.usr_mqtt.pub_len > 0 and #s > _G.usr_mqtt.pub_len and s:sub(1, 3):upper() ~= "AT+" then
+    	if string.byte(s, #s) == 26 then
+	    	local data = string.sub(s, 1, _G.usr_mqtt.pub_len)
+	    	_G.usr_mqtt.pub_len = 0
+	    	sys.publish("NET_SENT_RDY_" .. uid, data)
+	    else
+	    	_G.usr_mqtt.pub_topic = nil
+	    	_G.usr_mqtt.pub_len = 0
+	    	uart.write(uid, "ERROR\r\n")
+    	end
+    	return 1
+    end
+    if s:sub(1, 2):upper() == "AT" then
+        local tmp_s = s:match("(.+)\r\n") or s
+        local intermediateBuff = table.concat(_G.at_intermediateBuff)
+        _G.at_intermediateBuff = {}
+        --识别大云环境采集仪
+        if #tmp_s == 2 then
+            dy_at = dy_at + 1
+            if dy_at > 1 then
+                _G.dy_at_mode = 1
+            else
+                return 0
+            end
+        end
+        if not socket.isReady() then
+            uart.write(uid, "ERROR\r\n")
+        end
+
+        if #tmp_s == 2 or tmp_s:sub(1, 3):upper() == "ATE" or tmp_s:sub(1, 8):upper() == "AT+QNITZ" or tmp_s:sub(1, 7):upper() == "AT+CTZU" or tmp_s:sub(1, 10):upper() == "AT+QMTCFG=" then
+            log.info("dyat","UART_" .. uid .. " send", "OK\r\n")
+        	uart.write(uid, "OK\r\n")
+        elseif tmp_s:sub(1, 7):upper() == "AT+CPIN" then
+		    ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+		    			if response == "OK" then
+		    				uart.write(uid, "+CPIN: READY\r\n" .. response .. "\r\n")
+		    			else
+		    				uart.write(uid, response .. "\r\n")
+                        end
+                        intermediateBuff = table.concat(_G.at_intermediateBuff)
+                        log.info(uid, intermediateBuff)
+		            end, nil)
+		elseif tmp_s:sub(1, 7):upper() == "AT+CREG" then
+		    ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+		    			if response == "OK" then
+		    				uart.write(uid, "+CREG: 0,1\r\n" .. response .. "\r\n")
+		    			else
+		    				uart.write(uid, response .. "\r\n")
+		    			end
+		    			intermediateBuff = table.concat(_G.at_intermediateBuff)
+                        log.info(uid, intermediateBuff)
+		            end, nil)
+		elseif tmp_s:sub(1, 8):upper() == "AT+CGATT" then
+		    ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+		    			if intermediate then
+		    				uart.write(uid, "+CGATT: 1\r\n" .. response .. "\r\n")
+		    			else
+		    				uart.write(uid, response .. "\r\n")
+		    			end
+		    			intermediateBuff = table.concat(_G.at_intermediateBuff)
+                        log.info(uid, intermediateBuff)
+		            end, nil)
+        elseif tmp_s:sub(1, 7):upper() == "AT+CCLK" then
+		    ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+		    			if intermediate then
+		    				uart.write(uid, intermediate .. "\r\n" .. response .. "\r\n")
+		    			else
+		    				uart.write(uid, response .. "\r\n")
+		    			end
+		    			intermediateBuff = table.concat(_G.at_intermediateBuff)
+                        log.info(uid, intermediateBuff)
+		            end, nil)
+        elseif tmp_s:sub(1, 6):upper() == "AT+QMT" then
+            log.info("dyat","tmp_s:", tmp_s)
+			local user_info = string.split(tmp_s, ",")
+        	if tmp_s:sub(1, 10):upper() == "AT+QMTCFG" then
+        		uart.write(uid, "OK\r\n")
+        	elseif tmp_s:sub(1, 11):upper() == "AT+QMTOPEN=" then
+        		--AT+QMTOPEN=0,"183.129.159.166",10203
+
+        		--因设备有问题注释，_G.usr_mqtt.addr = string.sub(user_info[2], 2, -2)
+        		if string.find(user_info[2], "183.129.") ~= nil then
+        			_G.usr_mqtt.addr = "183.129.159.166"
+        		else
+        			_G.usr_mqtt.addr = string.sub(user_info[2], 2, -2)
+        		end
+                _G.usr_mqtt.port = user_info[3]
+                log.info("dyat","addr,port",_G.usr_mqtt.addr,_G.usr_mqtt.port,type(_G.usr_mqtt.addr),type(_G.usr_mqtt.port),type(user_info[3]))
+        		uart.write(uid, "+QMTOPEN: 0,0\r\n")
+        	elseif tmp_s:sub(1, 11):upper() == "AT+QMTCONN=" then
+        		--AT+QMTCONN=0,"000248445787","dywlgsq","dywlgsq"
+
+        		_G.usr_mqtt.clientId = string.sub(user_info[2], 2, -2)
+        		if user_info[3] then _G.usr_mqtt.usr = string.sub(user_info[3], 2, -2) end
+                if user_info[4] then _G.usr_mqtt.pwd = string.sub(user_info[4], 2, -2) end
+                log.info("dyat","addr,port,clientId,usr,pwd:",_G.usr_mqtt.addr,_G.usr_mqtt.port,_G.usr_mqtt.clientId,_G.usr_mqtt.usr,_G.usr_mqtt.pwd)
+
+        		--keepAlive, timeout, addr, port, usr, pwd, cleansession, sub, pub, qos, retain, uid, clientID, addImei, ssl, will, cert
+         		--"60", "0", _G.usr_mqtt.addr, _G.usr_mqtt.port, "", "", 0, _G.usr_mqtt.sub_topic, "", 0, 0, 1, _G.usr_mqtt.clientId, "1","tcp",""
+         		if _G.usr_mqtt.created == 0 and _G.usr_mqtt.addr and _G.usr_mqtt.port then
+         			_G.usr_mqtt.created = 1
+            		sys.taskInit(create.DyMqttTask, 0, pios, dtu.reg, tonumber(dtu.convert) or 0, (tonumber(dtu.passon) == 0), dtu.upprot, dtu.dwprot, "60", "0", _G.usr_mqtt.addr, _G.usr_mqtt.port, _G.usr_mqtt.usr, _G.usr_mqtt.pwd, 0, _G.usr_mqtt.sub_topic, "", 0, 0, 1, _G.usr_mqtt.clientId, "1","tcp","")
+            	end
+            	uart.write(uid, "+QMTCONN: 0,0,0\r\n")
+        	elseif tmp_s:sub(1, 10):upper() == "AT+QMTSUB=" then
+        		--AT+QMTSUB=0,1,"M/210155FF0003/#",2
+
+        		_G.usr_mqtt.sub_topic = string.sub(user_info[3], 2, -2)
+        		sys.publish("SUB_TOPIC_IND" .. uid, _G.usr_mqtt.sub_topic)
+
+                log.info("dyat","_G.usr_mqtt.sub_topic",_G.usr_mqtt.sub_topic)
+        		if _G.usr_mqtt.connected == 1 then uart.write(uid, "+QMTSUB: 0,1,0\r\n") end
+            elseif tmp_s:sub(1, 10):upper() == "AT+QMTPUB=" then
+
+            	if #user_info > 5 and string.find(user_info[5]:sub(1, 1), "\"", 1) ~= nil and string.find(user_info[5]:sub(-1, #user_info[5]), "\"", 1) ~= nil then
+	        		_G.usr_mqtt.pub_topic = string.sub(user_info[5], 2, -2)
+	        		local user_topic = string.split(_G.usr_mqtt.pub_topic, "/")
+	        		_G.uart_operation = user_topic[#user_topic]
+	        		_G.usr_mqtt.pub_len = tonumber(user_info[6])
+
+                    log.info("dyat","string.byte(s, #s):",string.byte(s, #s))
+	        		if string.byte(s, #s) == 26 then
+				    	local data = string.sub(s, #tmp_s+3, #s-1)
+				    	_G.usr_mqtt.pub_len = 0
+                        log.info("dyat","uid,data",uid,data:toHex())
+				    	sys.publish("NET_SENT_RDY_" .. uid, data)
+				    else
+				    	uart.write(uid, ">\r\n")
+				    end
+
+	        		--uart.write(uid, "+QMTPUB: 0,0,0\r\n")
+	        	else
+	        		uart.write(uid, "ERROR\r\n")
+        		end
+            end
+        elseif tmp_s:sub(1, 2):upper() == "AT" then
+            ril.request(tmp_s, nil, function(cmd, success, response, intermediate)
+                intermediateBuff = table.concat(_G.at_intermediateBuff)
+                uart.write(uid, intermediateBuff)
+            end, nil)
+        end
+        return 1
+    end
+    return 0
+end
+
 -- 串口读指令
 local function read(uid)
     local s = table.concat(recvBuff[uid])
@@ -573,8 +847,8 @@ local function read(uid)
     -- 串口流量统计
     flowCount[uid] = flowCount[uid] + #s
     -- log.info("UART_" .. uid .. "read length:", #s)
-    log.info("UART_" .. uid .. " read:", (s:toHex()))
-    log.info("串口流量统计值:", flowCount[uid])
+    log.info("uart","UART_" .. uid .. " recv", (s:toHex()))
+    log.info("uart","串口流量统计值:", flowCount[uid])
     -- 根据透传标志位判断是否解析数据
     if s:sub(1, 3) == "+++" or s:sub(1, 5):match("(.+)\r\n") == "+++" then
         write(uid, "OK\r\n")
@@ -584,11 +858,30 @@ local function read(uid)
         if io.exists("/bdiot.dat") then os.remove("/bdiot.dat") end
         sys.restart("Restore default parameters:", "OK")
     end
+    -- DY S5上线慢
+    if s:sub(1, 28) == '{"RTUS5_Request":"DTU_Type"}' then
+        write(uid, '{"DTU_Type":"Gateway"}')
+        log.info("uart","UART_" .. uid .. "DTU_Type:Gateway")
+        return
+    end
 
     --如果只接收到换行字符回应换行字符
     if #s <= 2 and s:sub(1,1) == "\n" or s:sub(1,2) == "\r\n" then
         uart.write(uid, "luat OK\n")
         return
+    end
+    -- AT指令处理
+    if AtModeProcess(uid, s) == 1 then
+        return
+    elseif DyCmdProcess(uid, s) == 1 then
+        return
+    elseif _G.usr_mqtt.created == 1 then
+        uart.write(uid, "ERROR\r\n")
+        return
+    end
+
+    if s:sub(1, 2):upper() ~= "AT" and dy_at == 1 then
+        dy_at = 0
     end
 
     if s:sub(1, 7) == "factory" then
@@ -687,14 +980,14 @@ local function read(uid)
             sys.publish("NET_SENT_RDY_" .. s:sub(6, 6), s:sub(8, -1))
         else
             -- lnxall 协议解析数据
-            sys.publish("NET_SENT_RDY_" .. uid, s)
+            sys.publish("NET_SENT_RDY_" .. uid, s) --TODO:疑似重复解析了
             --停用超时计数器
             sys.timerStopAll(uart_timeout)
             -- write(uid, "ERROR\r\n")
             confirmIdle[uid] = true
 
             local str = table.remove(confirmBuff[uid])
-            if str then sys.publish("NET_RECV_WAIT_" .. uid, uid, str) end
+            if str then sys.publish("NET_RECV_WAIT_" .. uid, uid, str) end --发送到串口包合并模块
         end
     end
 end
@@ -703,9 +996,16 @@ end
 function uart_INIT(i, uconf)
     local id = (is8910 and i == 2) and 3 or i
     if id == 3 then return end
+    log.info("uart.setup", uconf[i][1], uconf[i][2], uconf[i][3], uconf[i][4], uconf[i][5])
     uart.setup(i, uconf[i][2], uconf[i][3], uconf[i][4], uconf[i][5], nil, 1)
     uart.on(i, "sent", writeDone)
     uart.on(i, "receive", function(uid, length)
+        local used_memory = _G.collectgarbage("count")
+        if used_memory > 900 then --not enough memory
+            log.warn("uart","ignore recv data",string.format("memory over limit, current used %dKB",used_memory))
+            local tmp = uart.read(uid, length or 8192)
+            return
+        end
         table.insert(recvBuff[uid], uart.read(uid, length or 8192))
         sys.timerStart(sys.publish, 800, "UART_RECV_WAIT_" .. uid, uid)
     end)
@@ -714,7 +1014,7 @@ function uart_INIT(i, uconf)
     sys.subscribe("UART_SENT_RDY_" .. i, write)
     -- 网络数据写串口延时分帧
     sys.subscribe("NET_RECV_WAIT_" .. i, function(uid, str)
-        if not str or #str < 2 then return end
+        if not str or #str < 2 or _G.at_mode == 1 then return end
 
         if confirmIdle[uid] and confirmIdle[uid] == true then --空闲
             if tonumber(dtu.netReadTime) and tonumber(dtu.netReadTime) > 5 then
@@ -730,14 +1030,39 @@ function uart_INIT(i, uconf)
             sys.timerStart(uart_timeout, 1500, uid,str)
             confirmIdle[uid] = false
         else
-
+            local used_memory = _G.collectgarbage("count")
+            if used_memory > 900 then --not enough memory
+                log.warn("uart","ignore sockek data",string.format("memory over limit, current used %dKB",used_memory))
+                return
+            end
             table.insert(confirmBuff[uid],str)--排队发送
         end
 
     end)
     -- 485方向控制
     if not dtu.uconf[i][6] or dtu.uconf[i][6] == "" then -- 这么定义是为了和之前的代码兼容
-        default["dir" .. i] = i == 1 and (is1802S and 61 or (is4gLod and 23 or 2)) or (is1802S and 32 or (is4gLod and 59 or 6))
+        if i == 1 then
+            if is8910 then
+                default["dir1"] = 23--18
+            elseif is1802S then
+                default["dir1"] = 61
+            elseif is4gLod then
+                default["dir1"] = 23
+            else
+                default["dir1"] = 2
+            end
+        elseif i == 2 then
+            if is8910 then
+                default["dir2"] = 18--23
+            elseif is1802S then
+                default["dir2"] = 32
+            elseif is4gLod then
+                default["dir2"] = 59
+            else
+                default["dir2"] = 6
+            end
+        end
+        --default["dir" .. i] = i == 1 and (is1802S and 61 or (is4gLod and 23 or 2)) or (is1802S and 32 or (is4gLod and 59 or 6))
     else
         if pios[dtu.uconf[i][6]] then
             default["dir" .. i] = tonumber(dtu.uconf[i][6]:sub(4, -1))
@@ -748,6 +1073,7 @@ function uart_INIT(i, uconf)
     end
     if default["dir" .. i] then
         pins.setup(default["dir" .. i], 0)
+        log.info("set_rs485_oe:", "dir" .. i, default["dir" .. i])
         uart.set_rs485_oe(i, default["dir" .. i])
     end
     -- 为了模拟linux 系统启动消息,出厂工具上电可以检查到设备
@@ -777,6 +1103,7 @@ sys.taskInit(function()
         end
 
         -- 检查是否有更新程序
+        log.info("VERSION:", _G.VERSION)
         if tonumber(dtu.fota) == 1 then
             if is4gLod and rtos.fota_start() == 0 then
                 url = "iot.openluat.com/api/site/firmware_upgrade?project_key=" .. _G.PRODUCT_KEY
@@ -786,14 +1113,15 @@ sys.taskInit(function()
                 if tonumber(code) == 200 or tonumber(code) == 206 then rst = true end
                 rtos.fota_end()
             elseif not is4gLod then
-                url = "iot.openluat.com/api/site/firmware_upgrade?project_key=" .. _G.PRODUCT_KEY
-                    .. "&imei=" .. misc.getImei() .. "&device_key=" .. misc.getSn()
-                    .. "&firmware_name=" .. _G.PROJECT .. "_" .. rtos.get_version() .. "&version=" .. _G.VERSION
-                code, head, body = httpv2.request("GET", url, 30000)
-                if tonumber(code) == 200 and body and #body > 1024 then
-                    io.writeFile("/luazip/update.bin", body)
-                    rst = true
-                end
+                update.request()
+                --url = "iot.openluat.com/api/site/firmware_upgrade?project_key=" .. _G.PRODUCT_KEY
+                    --.. "&imei=" .. misc.getImei() .. "&device_key=" .. misc.getSn()
+                    --.. "&firmware_name=" .. _G.PROJECT .. "_" .. rtos.get_version() .. "&version=" .. _G.VERSION
+                --code, head, body = httpv2.request("GET", url, 30000)
+                --if tonumber(code) == 200 and body and #body > 1024 then
+                    --io.writeFile("/luazip/update.bin", body)
+                    --rst = true
+                --end
             end
         end
         if rst then sys.restart("DTU Parameters or firmware are updated!") end
@@ -811,8 +1139,9 @@ sys.taskInit(function()
 end)
 
 sys.timerLoopStart(function()
-    log.info("打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
-    log.info("打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
+    collectgarbage("collect")
+    log.info("system","打印占用的内存:", _G.collectgarbage("count"))-- 打印占用的RAM
+    log.info("system","打印可用的空间", rtos.get_fs_free_size())-- 打印剩余FALSH，单位Byte
     socket.printStatus()
 end, 10000)
 
@@ -851,8 +1180,11 @@ if config and #config > 0 then
     if #config  >= 1 and tonumber(config[1][1]) == 1 then uart_INIT(1, config) end
     if #config  >= 2 and tonumber(config[2][1]) == 2 then uart_INIT(2, config) end
 else
-    if uidgps ~= 1 and dtu.uconf and dtu.uconf[1] and tonumber(dtu.uconf[1][1]) == 1 then uart_INIT(1, dtu.uconf)   end
-    if uidgps ~= 2 and dtu.uconf and dtu.uconf[2] and tonumber(dtu.uconf[2][1]) == 2 then uart_INIT(2, dtu.uconf)   end
+    local uconf = {{1, 115200, 8, uart.PAR_NONE, uart.STOP_1}, {2, 115200, 8, uart.PAR_NONE, uart.STOP_1}}
+    uart_INIT(1, uconf)
+    uart_INIT(2, uconf)
+    -- if uidgps ~= 1 and dtu.uconf and dtu.uconf[1] and tonumber(dtu.uconf[1][1]) == 1 then uart_INIT(1, uconf)   end
+    -- if uidgps ~= 2 and dtu.uconf and dtu.uconf[2] and tonumber(dtu.uconf[2][1]) == 2 then uart_INIT(2, uconf)   end
 end
 
 -- 启动GPS任务
@@ -958,7 +1290,12 @@ end
 -- ---------------------------------------------------------- 远程日志线程 ----------------------------------------------------------
 sys.taskInit(function()
     if not socket.isReady() and not sys.waitUntil("IP_READY_IND", rstTim) then sys.restart("网络初始化失败!") end
-
+    if log.get_remote_addr and type(log.get_remote_addr) == "function" then
+        local remote_addr = log.get_remote_addr()
+        if remote_addr then
+            errDump.request(remote_addr)
+        end
+    end
     while true do
         local remote_addr = nil
         if log.get_remote_addr and type(log.get_remote_addr) == "function" then
@@ -1034,6 +1371,10 @@ function JJ_Msg_subscribe()
             for i=1,#config do default.reload_uart(i,config) end
         end
     end)
+    sys.subscribe("JJ_NET_RECV_" .. "Lora",function(payload)
+        if payload then io.writeFile(lnxall_conf.LNXALL_lora, payload) end
+        local config = lnxall_conf.get_lora_param()
+    end)
     sys.subscribe("JJ_NET_RECV_" .. "RunMode",function(payload)
         local mode = json.decode(payload)
         if mode and mode.run_mode and io.exists(lnxall_conf.LNXALL_factory_info) then
@@ -1095,22 +1436,14 @@ function JJ_Msg_subscribe()
             sys.publish("JJ_NET_SEND_MSG_" .. "HeartBeat")
             lost_count = lost_count + 1
         else
-            local str =  json.encode({
-                mi = lnxall_conf.msgid(),
-                timestamp = os.time(),
-                arch = 'none',
-                soft_ver = _G.VERSION,
-                imei=misc.getImei(),
-                product=misc.getProductName(),
-                product = misc.getProductName and type(misc.getProductName)  == "function" and misc.getProductName(),
-                run_mode = misc.getRunMode and type(misc.getRunMode)  == "function" and misc.getRunMode() or 0,
-                gwid =  misc.getGatewayID and type(misc.getGatewayID)  == "function" and misc.getGatewayID() or misc.getImei()
-                })
-            if str then
-                sys.publish("JJ_NET_SEND_MSG_" .. "LoginReq", str)
-            end
+            create.lnxall_login()
         end
-    end, 60 * 1000)
+    end, 5 * 60 * 1000)
+
+    sys.timerLoopStart(function()
+        sys.printTaskDebug()
+        socket.printStatusDebug()
+    end, 3 * 60 * 1000)
 end
 
 -- ********************** 异步消息下行配置(需要独立协程处理,含有辅助业务逻辑) ********************************
@@ -1166,10 +1499,15 @@ sys.taskInit(function()
                                         local suffix = "mod={} \nfunction mod.protocol_decode(...)  return protocol_decode(...) end \nfunction mod.protocol_encode(...)  return protocol_encode(...) end \nreturn mod\n"
                                         lua_str = lua_str .. suffix
                                     end
-
+                                    --解析脚本
                                     local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH or "","lua",file)
                                     log.info("node.template",'nodes templates script file: ',lua_path,#lua_str)
                                     io.writeFile(lua_path, lua_str)
+                                    --解析脚本备份,原因是CAT1运行中重启丢失日志
+                                    local lua_path = string.format("%s/%s/%s",lnxall_conf.PREFIX_PATH or "","lnxall",file)
+                                    log.info("node.template",'nodes templates backup script file: ',lua_path,#lua_str)
+                                    io.writeFile(lua_path, lua_str)
+
                                     lua_str = nil suffix = nil
                                     collectgarbage("collect")
                                 end
@@ -1212,7 +1550,28 @@ function reload_uart(i, uconf)
     end)
     -- 485方向控制
     if not dtu.uconf[i][6] or dtu.uconf[i][6] == "" then -- 这么定义是为了和之前的代码兼容
-        default["dir" .. i] = i == 1 and (is1802S and 61 or (is4gLod and 23 or 2)) or (is1802S and 32 or (is4gLod and 59 or 6))
+        if i == 1 then
+            if is8910 then
+                default["dir1"] = 23--18
+            elseif is1802S then
+                default["dir1"] = 61
+            elseif is4gLod then
+                default["dir1"] = 23
+            else
+                default["dir1"] = 2
+            end
+        elseif i == 2 then
+            if is8910 then
+                default["dir2"] = 18--23
+            elseif is1802S then
+                default["dir2"] = 32
+            elseif is4gLod then
+                default["dir2"] = 59
+            else
+                default["dir2"] = 6
+            end
+        end
+        --default["dir" .. i] = i == 1 and (is1802S and 61 or (is4gLod and 23 or 2)) or (is1802S and 32 or (is4gLod and 59 or 6))
     else
         if pios[dtu.uconf[i][6]] then
             default["dir" .. i] = tonumber(dtu.uconf[i][6]:sub(4, -1))
@@ -1224,6 +1583,7 @@ function reload_uart(i, uconf)
     if default["dir" .. i] then
         pins.close(default["dir" .. i])
         pins.setup(default["dir" .. i], 0)
+	log.info("reset_rs485_oe:", "dir" .. i, default["dir" .. i])
         uart.set_rs485_oe(i, default["dir" .. i])
     end
 end
@@ -1261,7 +1621,6 @@ sys.taskInit(function()
         end
     end
 end)
-
 
 ---------------------------------------------------------- 用户自定义任务初始化 ---------------------------------------------------------
 if dtu.task and #dtu.task ~= 0 then

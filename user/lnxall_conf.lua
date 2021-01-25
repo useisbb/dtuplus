@@ -21,12 +21,17 @@ LNXALL_nodes_temp=PREFIX_PATH .. '/lnxall/templates_cfg.json'
 LNXALL_remote_log_cfg=PREFIX_PATH .. '/lnxall/remote_log_cfg.json'
 LNXALL_transparent_cfg=PREFIX_PATH .. '/lnxall/transparent_cfg.json'
 LNXALL_factory_info=PREFIX_PATH .. '/lnxall/factory_info.json'
+LNXALL_lora=PREFIX_PATH .. '/lnxall/lora_cfg.json'
 
 local parity_map={}
 -- lnxall 0 -> luat 2
 parity_map[0] = 2
 parity_map[1] = 1
 parity_map[2] = 0
+
+local uart_port_map={}
+uart_port_map["RS485_1"] = 1
+uart_port_map["RS485_2"] = 2
 
 nodes_cfg={}
 nodes_temp={}
@@ -55,7 +60,7 @@ if not io.exists(TMP_DIR) then
 end
 
 -- -- 测试透传配置
--- local str = '{"common_socket_cfg":[{"protocol_type":"TCP","socket_addr":"10.3.1.217","socket_port":12345,"binding_port":"RS485_1","frame_header":"02","frame_tail":"03","login_packet":"FF 0D 09 01","heartbeat_packet":"FF 0D 09 02","heartbeat_interval":300}]}'
+-- local str = '{"common_socket_cfg":[{"protocol_type":"TCP","socket_addr":"qa.frps.lnxall.com","socket_port":5028,"binding_port":"RS485_1","frame_header":"02","frame_tail":"03","login_packet":"FF 0D 09 01","heartbeat_packet":"FF 0D 09 02","heartbeat_interval":300}]}'
 -- io.writeFile(LNXALL_transparent_cfg, str, 'w')
 
 -- -- 测试串口配置
@@ -218,9 +223,30 @@ end
 
 local function bind_module_func(modules)
     for k,v in ipairs(modules)do
+        if v then
+            local script_file = string.format("%s/%s.lua",LUA_DIR,v)
+            local script_bak_file = string.format("%s/%s.lua",LNXALL_DIR,v)
+            if not io.exists(script_file) then
+                log.fatal("lnxall_config","Not found script file,due to the template request script:", script_file)
+                if io.exists(script_bak_file) then --检查备份是否存在
+                    local content = io.readFile(script_bak_file) --读取备份中内容
+                    if content then
+                        log.error("lnxall_config","restore script",script_file,"form:",script_bak_file)
+                        io.writeFile(script_file, content)
+                    else
+                        log.error("lnxall_config","backup file has not any content!,file:",script_bak_file)
+                    end
+                else
+                    log.error("lnxall_config","backup file has not exist!,file:",script_bak_file)
+                end
+            else
+                log.info("lnxall_config","check script of template has exist,file:",script_file)
+            end
+        end
         -- 通过脚本名称找模板id->用模板id找设备模板->对设备模板赋值
         local bind = string.format('\
         local %s = require \"%s\"\
+        if not %s then print(\"retry to require failed!!!!!\") end\
         local cjson = require \"cjson\"\
         if not _G.nodes_cfg or not _G.nodes_temp then \
         print(\"nodes config or template was invalid \",cjson.encode(_G.nodes_cfg),cjson.encode(_G.nodes_temp))\
@@ -238,7 +264,7 @@ local function bind_module_func(modules)
                 node.protocol_encode = encode\
             end\
         end\n'
-        ,v,v,v,v,v)
+        ,v,v,v,v,v,v)
         log.debug("lnxall_config.bind.module","called module name:",bind,loadstring(bind))
         local res, msg = pcall(loadstring(bind))
         if res and res == true then
@@ -301,26 +327,50 @@ end
 
 function get_uart_param()
     if io.exists(LNXALL_rs485) then
-        rs_485 = {}
+        rs_485 = {{},{}}
         local dat, res, err = json.decode(io.readFile(LNXALL_rs485) or '')
         -- local dat, res, err = json.decode(io.readFile(LNXALL_rs485))
         if res and dat and dat.rs485_cfg then
             for k,v in pairs(dat.rs485_cfg)do
-                tmp={}
-                tmp[1] = k
-                tmp[2] = v['speed']
-                tmp[3] = 8
-                tmp[4] = parity_map[(v['parity'] and 0)]
-                tmp[5] = stopbit_map[(v['stop'] and 1)]
-                if dir_io_map[k] then
-                    tmp[6] = dir_io_map[k]
+                local pos = uart_port_map[v['port']]
+                if pos then
+                    tmp={}
+                    tmp[1] = pos
+                    tmp[2] = v['speed']
+                    tmp[3] = 8
+                    tmp[4] = parity_map[(v['parity'] and 0)]
+                    tmp[5] = stopbit_map[(v['stop'] and 1)]
+                    if dir_io_map[k] then
+                        tmp[6] = dir_io_map[k]
+                    end
+                    table.remove(rs_485,pos,1)
+                    table.insert(rs_485,pos,tmp)
                 end
-                table.insert(rs_485,tmp)
-                if(k == 2)then break end
             end
             return rs_485
         else
             log.error("lnxall_config.uart",'485 config file error, ',err)
+        end
+    end
+    return nil
+end
+
+function get_lora_param()
+    if io.exists(LNXALL_lora) then
+        lora_param = {}
+        log.info("lora",io.readFile(LNXALL_lora))
+        local dat, res, err = json.decode(io.readFile(LNXALL_lora) or '')
+        -- local dat, res, err = json.decode(io.readFile(LNXALL_lora))
+        log.info("lora", dat, res, err)
+        if res and dat and dat.radio1 then
+            for k,v in pairs(dat.radio1)do
+                log.info("lora k v",k,v)
+                if(k == 'frq_code' or k == 'gw_lora_addr') then lora_param[k] = v end
+            end
+            log.info("lora",lora_param)
+            return lora_param
+        else
+            log.error("lnxall_config.lora",'lora config file error, ',err)
         end
     end
     return nil

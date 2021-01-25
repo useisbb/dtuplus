@@ -53,6 +53,7 @@ function inxallStart()
             return
         end
         local input= json.decode(payload) or {}
+        payload = nil
         local output={}
         input.term_addr=lnxall_conf.sn2addr(input and input.sn or nil)
         if not input.term_addr then
@@ -125,6 +126,7 @@ function inxallStart()
         end
         input.raw_data=string.toHex(rawdata)
         input.b64_data=base64.encode(rawdata)
+        rawdata = nil
         if valid and valid == true then --sn, identifier, mi 这些值在下行数据发送时被保存
             log.info("lnxall_data.uplink",'downlink command or data response parse function')
             input.identifier=v.identifier
@@ -173,9 +175,11 @@ end
 sys.taskInit(function ()
     while true do
         sys.waitUntil("JJ_NET_RECV_" .. "DownLinkMsgResp", 2000)  --如果等到发送消息的应答,或者超时才继续下一条轮询
-        local payload = lnxall_conf.period_service_poll()
-        if payload then
-            sys.publish("JJ_NET_RECV_" .. "DownLinkMsg",payload)
+        if _G.at_mode == 0 then
+            local payload = lnxall_conf.period_service_poll()
+            if payload then
+                sys.publish("JJ_NET_RECV_" .. "DownLinkMsg",payload)
+            end
         end
     end
 end)
@@ -188,6 +192,6 @@ local function testLoop(id)
     end
 end
 
-sys.taskInit(testLoop, 1)
+-- sys.taskInit(testLoop, 1)
 
 inxallStart()

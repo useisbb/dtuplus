@@ -504,5 +504,11 @@ function printStatus()
     end
 end
 
+function printStatusDebug()
+    for _, client in pairs(sockets) do
+        --log.error('system',string.format("Socket:%d Host:[%s:%d] Connected:%s Wait:%s",client["id"],client["address"],client["port"],client["connected"] and "true" or "false" ,client["wait"]))
+    end
+end
+
 --setDnsParsePara(4,4)
 --setTcpResendPara(1,16)
